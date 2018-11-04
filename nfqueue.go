@@ -20,12 +20,16 @@ type Nfqueue struct {
 	flags   []byte // uint16
 	bufsize []byte // uint32
 	family  uint8
-	queueNo uint16
+	queue   uint16
 }
 
 // Open a connection to the netfilter queue subsystem
-func Open() (*Nfqueue, error) {
+func Open(family uint8, queue uint16) (*Nfqueue, error) {
 	var nfqueue Nfqueue
+
+	if family != unix.AF_INET6 && family != unix.AF_INET {
+		return nil, ErrAfFamily
+	}
 
 	con, err := netlink.Dial(unix.NETLINK_NETFILTER, nil)
 	if err != nil {
@@ -34,6 +38,8 @@ func Open() (*Nfqueue, error) {
 	nfqueue.Con = con
 	// default size of copied packages to userspace
 	nfqueue.bufsize = []byte{0x0, 0x0, 0xff, 0xff}
+	nfqueue.family = family
+	nfqueue.queue = queue
 
 	return &nfqueue, nil
 }
@@ -47,6 +53,7 @@ func (nfqueue *Nfqueue) Close() error {
 // To stop receiving messages on this HookFunc, return something different than 0
 type HookFunc func(m Msg) int
 
+// SetVerdict signals the kernel the next action for a specified package id
 func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
 	/*
 		struct nfqnl_msg_verdict_hdr {
@@ -58,12 +65,12 @@ func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
 	binary.BigEndian.PutUint32(buf, uint32(id))
 	verdictData := append([]byte{0x0, 0x0, 0x0, byte(verdict)}, buf...)
 	cmd, err := netlink.MarshalAttributes([]netlink.Attribute{
-		{Type: NfQaVerdictHdr, Data: verdictData},
+		{Type: nfQaVerdictHdr, Data: verdictData},
 	})
 	if err != nil {
 		return 0, err
 	}
-	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queueNo)
+	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queue)
 	data = append(data, cmd...)
 	req := netlink.Message{
 		Header: netlink.Header{
@@ -77,23 +84,19 @@ func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
 }
 
 // Register your own function as callback for a netfilter log group
-func (nfqueue *Nfqueue) Register(ctx context.Context, afFamily, queue int, copyMode byte, fn HookFunc) error {
-
-	if afFamily != unix.AF_INET6 && afFamily != unix.AF_INET {
-		return ErrAfFamily
-	}
+func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc) error {
 
 	// unbinding existing handler (if any)
-	seq, err := nfqueue.setConfig(uint8(afFamily), 0, 0, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfUnbind, 0x0, 0x0, byte(afFamily)}},
+	seq, err := nfqueue.setConfig(nfqueue.family, 0, 0, []netlink.Attribute{
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
 		return err
 	}
 
 	// binding to family
-	_, err = nfqueue.setConfig(uint8(afFamily), seq, 0, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfBind, 0x0, 0x0, byte(afFamily)}},
+	_, err = nfqueue.setConfig(nfqueue.family, seq, 0, []netlink.Attribute{
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
 		return err
@@ -101,15 +104,15 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, afFamily, queue int, copyM
 
 	// binding to generic queue
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, 0, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(afFamily)}},
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
 		return err
 	}
 
 	// binding to the requested queue
-	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, uint16(queue), []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(afFamily)}},
+	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
 		return err
@@ -117,7 +120,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, afFamily, queue int, copyM
 
 	// set copy mode and buffer size
 	data := append(nfqueue.bufsize, copyMode)
-	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, uint16(queue), []netlink.Attribute{
+	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
 		{Type: nfQaCfgParams, Data: data},
 	})
 	if err != nil {
@@ -127,8 +130,8 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, afFamily, queue int, copyM
 	go func() {
 		defer func() {
 			// unbinding from queue
-			_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, uint16(queue), []netlink.Attribute{
-				{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(afFamily)}},
+			_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
+				{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 			})
 			if err != nil {
 				// TODO: handle this error
