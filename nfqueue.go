@@ -5,10 +5,11 @@ package nfqueue
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
+	"log"
 
 	"github.com/mdlayher/netlink"
 	"github.com/mdlayher/netlink/nlenc"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -17,7 +18,7 @@ type Nfqueue struct {
 	// Con is the pure representation of a netlink socket
 	Con *netlink.Conn
 
-	flags   []byte // uint16
+	flags   []byte // uint32
 	bufsize []byte // uint32
 	family  uint8
 	queue   uint16
@@ -83,8 +84,38 @@ func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
 	return nfqueue.execute(req)
 }
 
+// SetVerdictBatch signals the kernel the next action for a batch of packages till id
+func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) (uint32, error) {
+	/*
+		struct nfqnl_msg_verdict_hdr {
+			__be32 verdict;
+			__be32 id;
+		};
+	*/
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(id))
+	verdictData := append([]byte{0x0, 0x0, 0x0, byte(verdict)}, buf...)
+	cmd, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{Type: nfQaVerdictHdr, Data: verdictData},
+	})
+	if err != nil {
+		return 0, err
+	}
+	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queue)
+	data = append(data, cmd...)
+	req := netlink.Message{
+		Header: netlink.Header{
+			Type:     netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdictBatch),
+			Flags:    netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
+			Sequence: 0,
+		},
+		Data: data,
+	}
+	return nfqueue.execute(req)
+}
+
 // Register your own function as callback for a netfilter log group
-func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc) error {
+func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, log *log.Logger, fn HookFunc) error {
 
 	// unbinding existing handler (if any)
 	seq, err := nfqueue.setConfig(nfqueue.family, 0, 0, []netlink.Attribute{
@@ -127,6 +158,20 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		return err
 	}
 
+	var attrs []netlink.Attribute
+	if nfqueue.flags[0] != 0 || nfqueue.flags[1] != 0 || nfqueue.flags[2] != 0 || nfqueue.flags[3] != 0 {
+		// set flags
+		attrs = append(attrs, netlink.Attribute{Type: nfQaCfgFlags, Data: nfqueue.flags})
+		attrs = append(attrs, netlink.Attribute{Type: nfQaCfgMask, Data: nfqueue.flags})
+	}
+
+	if len(attrs) != 0 {
+		_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, attrs)
+		if err != nil {
+			return err
+		}
+	}
+
 	go func() {
 		defer func() {
 			// unbinding from queue
@@ -134,7 +179,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 				{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 			})
 			if err != nil {
-				// TODO: handle this error
+				log.Printf("Could not unbind from queue: %v", err)
 				return
 			}
 		}()
@@ -152,7 +197,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 				}
 				m, err := parseMsg(msg)
 				if err != nil {
-					fmt.Println(err)
+					log.Printf("Could not parse message: %v", err)
 					return
 				}
 				if ret := fn(m); ret != 0 {
@@ -203,7 +248,7 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	}
 	for _, msg := range reply {
 		if seq != 0 {
-			return 0, fmt.Errorf("Received more than one message from the kernel")
+			return 0, errors.Wrapf(ErrUnexpMsg, "Number of received messages: %d", len(reply))
 		}
 		seq = msg.Header.Sequence
 	}
@@ -240,7 +285,7 @@ func parseMsg(msg netlink.Message) (Msg, error) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%#v", errMsg)
+		return nil, errors.Wrapf(ErrRecvMsg, "%#v", errMsg)
 	}
 	m, err := extractAttributes(msg.Data)
 	if err != nil {
