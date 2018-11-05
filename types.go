@@ -9,6 +9,8 @@ var (
 	ErrUnknownAttribute = errors.New("Received unsupported attribute")
 	ErrAfFamily         = errors.New("Unsupported AF_Family type")
 	ErrNoTimestamp      = errors.New("Timestamp was not set")
+	ErrRecvMsg          = errors.New("Received error message")
+	ErrUnexpMsg         = errors.New("Received unexpected message from kernel")
 )
 
 // Msg contains all the information of a connection
@@ -26,8 +28,15 @@ const (
 	AttrIfIndexPhysInDev  = iota
 	AttrIfIndexPhysOutDev = iota
 	AttrPayload           = iota
+	AttrCapLen            = iota
 	AttrTimestamp         = iota
 	AttrHwAddr            = iota
+	AttrMark              = iota
+	AttrUID               = iota
+	AttrGID               = iota
+	AttrL2HDR             = iota
+	AttrCtInfo            = iota /* enum ip_conntrack_info */
+	AttrSecCtx            = iota
 )
 
 const (
@@ -56,16 +65,14 @@ const (
 )
 
 const (
-	nfQaCfgUnspec      = iota
-	nfQaCfgCmd         = iota /* nfqnl_msg_config_cmd */
-	nfQaCfgParams      = iota /* nfqnl_msg_config_params */
-	nfQaCfgQueueMaxLen = iota /* __u32 */
-	nfQaCfgMask        = iota /* identify which flags to change */
-	nfQaCfgFlags       = iota /* value of these flags (__u32) */
+	nfQaCfgCmd         = 1 /* nfqnl_msg_config_cmd */
+	nfQaCfgParams      = 2 /* nfqnl_msg_config_params */
+	nfQaCfgQueueMaxLen = 3 /* __u32 */
+	nfQaCfgMask        = 4 /* identify which flags to change */
+	nfQaCfgFlags       = 5 /* value of these flags (__u32) */
 )
 
 const (
-	nfUlnlCfgCmdNone     = 0x0
 	nfUlnlCfgCmdBind     = 0x1
 	nfUlnlCfgCmdUnbind   = 0x2
 	nfUlnlCfgCmdPfBind   = 0x3
@@ -73,7 +80,6 @@ const (
 )
 
 const (
-	nfQnlMsgPacket       = iota /* packet from kernel to userspace */
 	nfQnlMsgVerdict      = iota /* verdict from userspace to kernel */
 	nfQnlMsgConfig       = iota /* connect to a particular queue */
 	nfQnlMsgVerdictBatch = iota /* batchv from userspace to kernel */

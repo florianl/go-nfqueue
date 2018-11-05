@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mdlayher/netlink"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,6 +66,22 @@ func extractAttribute(m Msg, data []byte) error {
 		case nfQaHwAddr:
 			hwAddrLen := binary.BigEndian.Uint16(attr.Data[:2])
 			m[AttrHwAddr] = (attr.Data)[4 : 4+hwAddrLen]
+		case nfQaMark:
+			m[AttrMark] = attr.Data
+		case nfQaUID:
+			m[AttrUID] = attr.Data
+		case nfQaGID:
+			m[AttrGID] = attr.Data
+		case nfQaCtInfo:
+			m[AttrCtInfo] = attr.Data
+		case nfQaSecCtx:
+			m[AttrSecCtx] = attr.Data
+		case nfQaCapLen:
+			m[AttrCapLen] = attr.Data
+		case nfQaL2HDR:
+			m[AttrL2HDR] = attr.Data
+		default:
+			return errors.Wrapf(ErrUnknownAttribute, "Attribute Type: 0x%x", attr.Type)
 		}
 	}
 	return nil
