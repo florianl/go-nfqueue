@@ -39,10 +39,25 @@ func Open(family uint8, queue uint16) (*Nfqueue, error) {
 	nfqueue.Con = con
 	// default size of copied packages to userspace
 	nfqueue.bufsize = []byte{0x0, 0x0, 0xff, 0xff}
+	nfqueue.flags = []byte{0x0, 0x0, 0x0, 0x0}
 	nfqueue.family = family
 	nfqueue.queue = queue
 
 	return &nfqueue, nil
+}
+
+// SetFlag sets a specified flags on this socket
+func (nfqueue *Nfqueue) SetFlag(flag uint32) error {
+	if flag >= nfQaCfgFlagMax {
+		return ErrInvFlag
+	}
+	nlenc.PutUint32(nfqueue.flags, flag)
+	return nil
+}
+
+// ShowFlags returns the flags of this socket
+func (nfqueue *Nfqueue) ShowFlags() uint32 {
+	return nlenc.Uint32(nfqueue.flags)
 }
 
 // Close the connection to the netfilter queue subsystem

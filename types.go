@@ -11,6 +11,7 @@ var (
 	ErrNoTimestamp      = errors.New("Timestamp was not set")
 	ErrRecvMsg          = errors.New("Received error message")
 	ErrUnexpMsg         = errors.New("Received unexpected message from kernel")
+	ErrInvFlag          = errors.New("Invalid Flag")
 )
 
 // Msg contains all the information of a connection
@@ -93,7 +94,7 @@ const (
 	NfQaCfgFlagGSO       = (1 << iota)
 	NfQaCfgFlagUidGid    = (1 << iota)
 	NfQaCfgFlagSecCx     = (1 << iota)
-	NfQaCfgFlagMax       = (1 << iota)
+	nfQaCfgFlagMax       = (1 << iota)
 )
 
 // copy modes
