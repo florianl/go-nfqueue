@@ -1,8 +1,10 @@
-//+build linux
-
 package nfqueue
 
 import "errors"
+
+// HookFunc is a function, that receives events from a Netlinkgroup
+// To stop receiving messages on this HookFunc, return something different than 0
+type HookFunc func(m Msg) int
 
 // Various errors
 var (
@@ -12,6 +14,7 @@ var (
 	ErrRecvMsg          = errors.New("Received error message")
 	ErrUnexpMsg         = errors.New("Received unexpected message from kernel")
 	ErrInvFlag          = errors.New("Invalid Flag")
+	ErrNotLinux         = errors.New("Not implemented for OS other than linux")
 )
 
 // Msg contains all the information of a connection

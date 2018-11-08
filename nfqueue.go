@@ -65,10 +65,6 @@ func (nfqueue *Nfqueue) Close() error {
 	return nfqueue.Con.Close()
 }
 
-// HookFunc is a function, that receives events from a Netlinkgroup
-// To stop receiving messages on this HookFunc, return something different than 0
-type HookFunc func(m Msg) int
-
 // SetVerdict signals the kernel the next action for a specified package id
 func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
 	/*
