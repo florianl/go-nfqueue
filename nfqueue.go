@@ -67,42 +67,29 @@ func (nfqueue *Nfqueue) Close() error {
 
 // SetVerdict signals the kernel the next action for a specified package id
 func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
-	/*
-		struct nfqnl_msg_verdict_hdr {
-			__be32 verdict;
-			__be32 id;
-		};
-	*/
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(id))
-	verdictData := append([]byte{0x0, 0x0, 0x0, byte(verdict)}, buf...)
-	cmd, err := netlink.MarshalAttributes([]netlink.Attribute{
-		{Type: nfQaVerdictHdr, Data: verdictData},
-	})
-	if err != nil {
-		return 0, err
-	}
-	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queue)
-	data = append(data, cmd...)
-	req := netlink.Message{
-		Header: netlink.Header{
-			Type:     netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict),
-			Flags:    netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
-			Sequence: 0,
-		},
-		Data: data,
-	}
-	return nfqueue.execute(req)
+	_, err := nfqueue.setVerdict(id, verdict, false)
+	return 0, err
+
 }
 
 // SetVerdictBatch signals the kernel the next action for a batch of packages till id
 func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) (uint32, error) {
+	_, err := nfqueue.setVerdict(id, verdict, true)
+	return 0, err
+}
+
+func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool) (uint32, error) {
 	/*
 		struct nfqnl_msg_verdict_hdr {
 			__be32 verdict;
 			__be32 id;
 		};
 	*/
+
+	if verdict != NfDrop && verdict != NfAccept && verdict != NfStolen && verdict != NfQeueue && verdict != NfRepeat {
+		return 0, ErrInvalidVerdict
+	}
+
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(id))
 	verdictData := append([]byte{0x0, 0x0, 0x0, byte(verdict)}, buf...)
@@ -116,11 +103,15 @@ func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) (uint32, error) {
 	data = append(data, cmd...)
 	req := netlink.Message{
 		Header: netlink.Header{
-			Type:     netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdictBatch),
 			Flags:    netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
 			Sequence: 0,
 		},
 		Data: data,
+	}
+	if batch {
+		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdictBatch)
+	} else {
+		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 	return nfqueue.execute(req)
 }

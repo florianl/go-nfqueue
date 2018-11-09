@@ -15,6 +15,7 @@ var (
 	ErrUnexpMsg         = errors.New("Received unexpected message from kernel")
 	ErrInvFlag          = errors.New("Invalid Flag")
 	ErrNotLinux         = errors.New("Not implemented for OS other than linux")
+	ErrInvalidVerdict   = errors.New("Invalid verdict")
 )
 
 // Msg contains all the information of a connection
