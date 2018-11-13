@@ -18,17 +18,36 @@ type Nfqueue struct {
 	// Con is the pure representation of a netlink socket
 	Con *netlink.Conn
 
+	logger *log.Logger
+
 	flags   []byte // uint32
 	bufsize []byte // uint32
 	family  uint8
 	queue   uint16
 }
 
+// Config contains options for a Conn.
+type Config struct {
+	AfFamily uint8
+
+	NfQueue uint16
+
+	// Interface to log internals.
+	Logger *log.Logger
+}
+
+// devNull satisfies io.Writer, in case *log.Logger is not provided
+type devNull struct{}
+
+func (devNull) Write(p []byte) (int, error) {
+	return 0, nil
+}
+
 // Open a connection to the netfilter queue subsystem
-func Open(family uint8, queue uint16) (*Nfqueue, error) {
+func Open(config *Config) (*Nfqueue, error) {
 	var nfqueue Nfqueue
 
-	if family != unix.AF_INET6 && family != unix.AF_INET {
+	if config.AfFamily != unix.AF_INET6 && config.AfFamily != unix.AF_INET {
 		return nil, ErrAfFamily
 	}
 
@@ -40,8 +59,13 @@ func Open(family uint8, queue uint16) (*Nfqueue, error) {
 	// default size of copied packages to userspace
 	nfqueue.bufsize = []byte{0x0, 0x0, 0xff, 0xff}
 	nfqueue.flags = []byte{0x0, 0x0, 0x0, 0x0}
-	nfqueue.family = family
-	nfqueue.queue = queue
+	nfqueue.family = config.AfFamily
+	nfqueue.queue = config.NfQueue
+	if config.Logger == nil {
+		nfqueue.logger = log.New(new(devNull), "", 0)
+	} else {
+		nfqueue.logger = config.Logger
+	}
 
 	return &nfqueue, nil
 }
@@ -116,8 +140,8 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool) (uint32, error) 
 	return nfqueue.execute(req)
 }
 
-// Register your own function as callback for a netfilter log group
-func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, log *log.Logger, fn HookFunc) error {
+// Register your own function as callback for a netfilter queue
+func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc) error {
 
 	// unbinding existing handler (if any)
 	seq, err := nfqueue.setConfig(nfqueue.family, 0, 0, []netlink.Attribute{
@@ -181,7 +205,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, log *log.Lo
 				{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 			})
 			if err != nil {
-				log.Printf("Could not unbind from queue: %v", err)
+				nfqueue.logger.Fatalf("Could not unbind from queue: %v", err)
 				return
 			}
 		}()
@@ -199,8 +223,8 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, log *log.Lo
 				}
 				m, err := parseMsg(msg)
 				if err != nil {
-					log.Printf("Could not parse message: %v", err)
-					return
+					nfqueue.logger.Fatalf("Could not parse message: %v", err)
+					continue
 				}
 				if ret := fn(m); ret != 0 {
 					return
