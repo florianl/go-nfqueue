@@ -89,20 +89,35 @@ func (nfqueue *Nfqueue) Close() error {
 	return nfqueue.Con.Close()
 }
 
+// SetVerdictWithMark signals the kernel the next action and the mark for a specified package id
+func (nfqueue *Nfqueue) SetVerdictWithMark(id, verdict, mark int) error {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(mark))
+	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: nfQaMark,
+		Data: buf,
+	}})
+	if err != nil {
+		return err
+	}
+	_, err = nfqueue.setVerdict(id, verdict, false, attributes)
+	return err
+}
+
 // SetVerdict signals the kernel the next action for a specified package id
-func (nfqueue *Nfqueue) SetVerdict(id, verdict int) (uint32, error) {
-	_, err := nfqueue.setVerdict(id, verdict, false)
-	return 0, err
+func (nfqueue *Nfqueue) SetVerdict(id, verdict int) error {
+	_, err := nfqueue.setVerdict(id, verdict, false, []byte{})
+	return err
 
 }
 
 // SetVerdictBatch signals the kernel the next action for a batch of packages till id
-func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) (uint32, error) {
-	_, err := nfqueue.setVerdict(id, verdict, true)
-	return 0, err
+func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) error {
+	_, err := nfqueue.setVerdict(id, verdict, true, []byte{})
+	return err
 }
 
-func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool) (uint32, error) {
+func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byte) (uint32, error) {
 	/*
 		struct nfqnl_msg_verdict_hdr {
 			__be32 verdict;
@@ -125,9 +140,10 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool) (uint32, error) 
 	}
 	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queue)
 	data = append(data, cmd...)
+	data = append(data, attributes...)
 	req := netlink.Message{
 		Header: netlink.Header{
-			Flags:    netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
+			Flags:    netlink.HeaderFlagsRequest,
 			Sequence: 0,
 		},
 		Data: data,
@@ -144,11 +160,11 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool) (uint32, error) 
 func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc) error {
 
 	// unbinding existing handler (if any)
-	seq, err := nfqueue.setConfig(nfqueue.family, 0, 0, []netlink.Attribute{
+	seq, err := nfqueue.setConfig(unix.AF_UNSPEC, 0, 0, []netlink.Attribute{
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Could not unbind existing handlers (if any)")
 	}
 
 	// binding to family
@@ -156,7 +172,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Could not bind to family %d", nfqueue.family)
 	}
 
 	// binding to generic queue
@@ -164,7 +180,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Could not bind to generic queue")
 	}
 
 	// binding to the requested queue
@@ -172,7 +188,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Could not bind to requested queue %d", nfqueue.queue)
 	}
 
 	// set copy mode and buffer size
@@ -183,7 +199,6 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 	if err != nil {
 		return err
 	}
-
 	var attrs []netlink.Attribute
 	if nfqueue.flags[0] != 0 || nfqueue.flags[1] != 0 || nfqueue.flags[2] != 0 || nfqueue.flags[3] != 0 {
 		// set flags
