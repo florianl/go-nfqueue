@@ -28,6 +28,10 @@ type Nfqueue struct {
 
 // Config contains options for a Conn.
 type Config struct {
+	// Network namespace the Nflog needs to operate in. If set to 0 (default),
+	// no network namespace will be entered.
+	NetNS int
+
 	AfFamily uint8
 
 	NfQueue uint16
@@ -51,7 +55,7 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, ErrAfFamily
 	}
 
-	con, err := netlink.Dial(unix.NETLINK_NETFILTER, nil)
+	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{NetNS: config.NetNS})
 	if err != nil {
 		return nil, err
 	}
