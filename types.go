@@ -85,9 +85,9 @@ const (
 )
 
 const (
-	nfQnlMsgVerdict      = iota /* verdict from userspace to kernel */
-	nfQnlMsgConfig       = iota /* connect to a particular queue */
-	nfQnlMsgVerdictBatch = iota /* batchv from userspace to kernel */
+	nfQnlMsgVerdict      = 1 /* verdict from userspace to kernel */
+	nfQnlMsgConfig       = 2 /* connect to a particular queue */
+	nfQnlMsgVerdictBatch = 3 /* batchv from userspace to kernel */
 
 )
 
