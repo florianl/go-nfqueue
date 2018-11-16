@@ -1,10 +1,27 @@
 package nfqueue
 
-import "errors"
+import (
+	"errors"
+	"log"
+)
 
 // HookFunc is a function, that receives events from a Netlinkgroup
 // To stop receiving messages on this HookFunc, return something different than 0
 type HookFunc func(m Msg) int
+
+// Config contains options for a Conn.
+type Config struct {
+	// Network namespace the Nflog needs to operate in. If set to 0 (default),
+	// no network namespace will be entered.
+	NetNS int
+
+	AfFamily uint8
+
+	NfQueue uint16
+
+	// Interface to log internals.
+	Logger *log.Logger
+}
 
 // Various errors
 var (
@@ -19,7 +36,7 @@ var (
 )
 
 // Msg contains all the information of a connection
-type Msg map[int][]byte
+type Msg map[int]interface{}
 
 // nfLogSubSysQueue the netlink subsystem we will query
 const nfnlSubSysQueue = 0x03
@@ -27,6 +44,7 @@ const nfnlSubSysQueue = 0x03
 // Various identifier,that can be the key of Msg map
 const (
 	AttrPacketID          = iota
+	AttrHook              = iota
 	AttrHwProtocol        = iota
 	AttrIfIndexInDev      = iota
 	AttrIfIndexOutDev     = iota
@@ -40,8 +58,13 @@ const (
 	AttrUID               = iota
 	AttrGID               = iota
 	AttrL2HDR             = iota
-	AttrCtInfo            = iota /* enum ip_conntrack_info */
+	AttrCt                = iota
+	AttrCtInfo            = iota
+	AttrSkbInfo           = iota
+	AttrExp               = iota
 	AttrSecCtx            = iota
+	AttrVlanProto         = iota
+	AttrVlanTCI           = iota
 )
 
 const (
