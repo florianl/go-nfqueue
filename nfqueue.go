@@ -24,20 +24,8 @@ type Nfqueue struct {
 	bufsize []byte // uint32
 	family  uint8
 	queue   uint16
-}
 
-// Config contains options for a Conn.
-type Config struct {
-	// Network namespace the Nflog needs to operate in. If set to 0 (default),
-	// no network namespace will be entered.
-	NetNS int
-
-	AfFamily uint8
-
-	NfQueue uint16
-
-	// Interface to log internals.
-	Logger *log.Logger
+	verdicts []netlink.Message
 }
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
@@ -104,24 +92,20 @@ func (nfqueue *Nfqueue) SetVerdictWithMark(id, verdict, mark int) error {
 	if err != nil {
 		return err
 	}
-	_, err = nfqueue.setVerdict(id, verdict, false, attributes)
-	return err
+	return nfqueue.setVerdict(id, verdict, false, attributes)
 }
 
 // SetVerdict signals the kernel the next action for a specified package id
 func (nfqueue *Nfqueue) SetVerdict(id, verdict int) error {
-	_, err := nfqueue.setVerdict(id, verdict, false, []byte{})
-	return err
-
+	return nfqueue.setVerdict(id, verdict, false, []byte{})
 }
 
 // SetVerdictBatch signals the kernel the next action for a batch of packages till id
 func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) error {
-	_, err := nfqueue.setVerdict(id, verdict, true, []byte{})
-	return err
+	return nfqueue.setVerdict(id, verdict, true, []byte{})
 }
 
-func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byte) (uint32, error) {
+func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byte) error {
 	/*
 		struct nfqnl_msg_verdict_hdr {
 			__be32 verdict;
@@ -130,7 +114,7 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byt
 	*/
 
 	if verdict != NfDrop && verdict != NfAccept && verdict != NfStolen && verdict != NfQeueue && verdict != NfRepeat {
-		return 0, ErrInvalidVerdict
+		return ErrInvalidVerdict
 	}
 
 	buf := make([]byte, 4)
@@ -140,7 +124,7 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byt
 		{Type: nfQaVerdictHdr, Data: verdictData},
 	})
 	if err != nil {
-		return 0, err
+		return err
 	}
 	data := putExtraHeader(nfqueue.family, unix.NFNETLINK_V0, nfqueue.queue)
 	data = append(data, cmd...)
@@ -157,7 +141,10 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byt
 	} else {
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
-	return nfqueue.execute(req)
+
+	nfqueue.verdicts = append(nfqueue.verdicts, req)
+
+	return nil
 }
 
 // Register your own function as callback for a netfilter queue
@@ -172,7 +159,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 	}
 
 	// binding to family
-	_, err = nfqueue.setConfig(nfqueue.family, seq, 0, []netlink.Attribute{
+	_, err = nfqueue.setConfig(unix.AF_UNSPEC, seq, 0, []netlink.Attribute{
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
@@ -189,7 +176,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 
 	// binding to the requested queue
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, 0x0}},
 	})
 	if err != nil {
 		return errors.Wrapf(err, "Could not bind to requested queue %d", nfqueue.queue)
@@ -203,6 +190,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 	if err != nil {
 		return err
 	}
+
 	var attrs []netlink.Attribute
 	if nfqueue.flags[0] != 0 || nfqueue.flags[1] != 0 || nfqueue.flags[2] != 0 || nfqueue.flags[3] != 0 {
 		// set flags
@@ -229,12 +217,19 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 			}
 		}()
 		for {
-			reply, err := nfqueue.Con.Receive()
+			if err := nfqueue.sendVerdicts(); err != nil {
+				return
+			}
+			replys, err := nfqueue.Con.Receive()
 			if err != nil {
 				return
 			}
-
-			for _, msg := range reply {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			for _, msg := range replys {
 				if msg.Header.Type == netlink.HeaderTypeDone {
 					// this is the last message of a batch
 					// continue to receive messages
@@ -299,6 +294,20 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	}
 
 	return seq, nil
+}
+
+func (nfqueue *Nfqueue) sendVerdicts() error {
+	if len(nfqueue.verdicts) == 0 {
+		return nil
+	}
+	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts)
+	if err != nil {
+		nfqueue.logger.Fatalf("Could not send verdict: %v", err)
+		return err
+	}
+	nfqueue.verdicts = []netlink.Message{}
+
+	return nil
 }
 
 // ErrMsg as defined in nlmsgerr

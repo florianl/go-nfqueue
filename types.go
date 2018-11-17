@@ -36,7 +36,7 @@ var (
 )
 
 // Msg contains all the information of a connection
-type Msg map[int]interface{}
+type Msg map[int][]byte
 
 // nfLogSubSysQueue the netlink subsystem we will query
 const nfnlSubSysQueue = 0x03
