@@ -166,14 +166,6 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		return errors.Wrapf(err, "Could not bind to family %d", nfqueue.family)
 	}
 
-	// binding to generic queue
-	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, 0, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
-	})
-	if err != nil {
-		return errors.Wrapf(err, "Could not bind to generic queue")
-	}
-
 	// binding to the requested queue
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, 0x0}},
