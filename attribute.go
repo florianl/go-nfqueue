@@ -12,77 +12,66 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Timestamp returns the timestamp of the message
-func (m *Msg) Timestamp() (time.Time, error) {
-	/*
-		struct nfulnl_msg_packet_timestamp {
-		__aligned_be64	sec;
-		__aligned_be64	usec;
-		};
-	*/
-	var sec, usec int64
-	data := (*m)[AttrTimestamp]
-	if len(data) == 0 {
-		return time.Unix(0, 0), ErrNoTimestamp
-	}
-	r := bytes.NewReader(data[:8])
-	if err := binary.Read(r, binary.BigEndian, &sec); err != nil {
-		return time.Unix(0, 0), err
-	}
-	r = bytes.NewReader(data[8:])
-	if err := binary.Read(r, binary.BigEndian, &usec); err != nil {
-		return time.Unix(0, 0), err
-	}
-	return time.Unix(sec, usec*1000), nil
-}
-
 func extractAttribute(m Msg, data []byte) error {
-	attributes, err := netlink.UnmarshalAttributes(data)
-
+	ad, err := netlink.NewAttributeDecoder(data)
 	if err != nil {
 		return err
 	}
-
-	for _, attr := range attributes {
-		if int(attr.Type) >= nfMax || int(attr.Type) == nfQaUnspec {
-			return ErrUnknownAttribute
-		}
-		switch attr.Type {
+	for ad.Next() {
+		switch ad.Type() {
 		case nfQaPacketHdr:
-			m[AttrPacketID] = (attr.Data)[:4]
-			m[AttrHwProtocol] = (attr.Data)[4:6]
-		case nfQaIfIndexInDev:
-			m[AttrIfIndexInDev] = attr.Data
-		case nfQaIfIndexOutDev:
-			m[AttrIfIndexOutDev] = attr.Data
-		case nfQaIfIndexPhysInDev:
-			m[AttrIfIndexPhysInDev] = attr.Data
-		case nfQaIfIndexPhysOutDev:
-			m[AttrIfIndexPhysOutDev] = attr.Data
-		case nfQaPayload:
-			m[AttrPayload] = attr.Data
+			m[AttrPacketID] = binary.BigEndian.Uint32(ad.Bytes()[:4])
+			m[AttrHwProtocol] = binary.BigEndian.Uint16(ad.Bytes()[4:6])
+			m[AttrHook] = ad.Bytes()[6]
 		case nfQaTimestamp:
-			m[AttrTimestamp] = attr.Data
+			var sec, usec int64
+			r := bytes.NewReader(ad.Bytes()[:8])
+			if err := binary.Read(r, binary.BigEndian, &sec); err != nil {
+				return err
+			}
+			r = bytes.NewReader(ad.Bytes()[8:])
+			if err := binary.Read(r, binary.BigEndian, &usec); err != nil {
+				return err
+			}
+			m[AttrTimestamp] = time.Unix(sec, usec*1000)
+		case nfQaIfIndexInDev:
+			m[AttrIfIndexInDev] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaIfIndexOutDev:
+			m[AttrIfIndexOutDev] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaIfIndexPhysInDev:
+			m[AttrIfIndexPhysInDev] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaIfIndexPhysOutDev:
+			m[AttrIfIndexPhysOutDev] = binary.BigEndian.Uint32(ad.Bytes())
 		case nfQaHwAddr:
-			hwAddrLen := binary.BigEndian.Uint16(attr.Data[:2])
-			m[AttrHwAddr] = (attr.Data)[4 : 4+hwAddrLen]
-		case nfQaMark:
-			m[AttrMark] = attr.Data
-		case nfQaUID:
-			m[AttrUID] = attr.Data
-		case nfQaGID:
-			m[AttrGID] = attr.Data
+			hwAddrLen := binary.BigEndian.Uint16(ad.Bytes()[:2])
+			m[AttrHwAddr] = (ad.Bytes())[4 : 4+hwAddrLen]
+		case nfQaPayload:
+			m[AttrPayload] = ad.Bytes()
+		case nfQaCt:
+			m[AttrCt] = ad.Bytes()
 		case nfQaCtInfo:
-			m[AttrCtInfo] = attr.Data
-		case nfQaSecCtx:
-			m[AttrSecCtx] = attr.Data
+			m[AttrCtInfo] = ad.Bytes()
 		case nfQaCapLen:
-			m[AttrCapLen] = attr.Data
+			m[AttrCapLen] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaSkbInfo:
+			m[AttrSkbInfo] = ad.Bytes()
+		case nfQaExp:
+			m[AttrExp] = ad.Bytes()
+		case nfQaUID:
+			m[AttrUID] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaGID:
+			m[AttrGID] = binary.BigEndian.Uint32(ad.Bytes())
+		case nfQaSecCtx:
+			m[AttrSecCtx] = ad.String()
 		case nfQaL2HDR:
-			m[AttrL2HDR] = attr.Data
+			m[AttrL2HDR] = ad.Bytes()
 		default:
-			return errors.Wrapf(ErrUnknownAttribute, "Attribute Type: 0x%x", attr.Type)
+			return errors.Wrapf(ErrUnknownAttribute, "Attribute Type: 0x%x\tData: %v", ad.Type(), ad.Bytes())
 		}
+	}
+
+	if err := ad.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -95,7 +84,7 @@ func checkHeader(data []byte) int {
 }
 
 func extractAttributes(msg []byte) (Msg, error) {
-	var data = make(map[int][]byte)
+	var data = make(Msg)
 
 	offset := checkHeader(msg[:2])
 	if err := extractAttribute(data, msg[offset:]); err != nil {

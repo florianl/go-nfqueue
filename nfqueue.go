@@ -20,10 +20,12 @@ type Nfqueue struct {
 
 	logger *log.Logger
 
-	flags   []byte // uint32
-	bufsize []byte // uint32
-	family  uint8
-	queue   uint16
+	flags        []byte // uint32
+	flagsMask    []byte // uint32
+	maxPacketLen []byte // uint32
+	family       uint8
+	queue        uint16
+	maxQueueLen  []byte // uint32
 
 	verdicts []netlink.Message
 }
@@ -49,10 +51,13 @@ func Open(config *Config) (*Nfqueue, error) {
 	}
 	nfqueue.Con = con
 	// default size of copied packages to userspace
-	nfqueue.bufsize = []byte{0x0, 0x0, 0xff, 0xff}
-	nfqueue.flags = []byte{0x0, 0x0, 0x0, 0x0}
+	nfqueue.maxPacketLen = []byte{0x00, 0x00, 0x00, 0x00}
+	binary.BigEndian.PutUint32(nfqueue.maxPacketLen, config.MaxPacketLen)
+	nfqueue.flags = nlenc.Uint32Bytes(config.Flags)
+	nfqueue.flagsMask = nlenc.Uint32Bytes(config.FlagsMask)
 	nfqueue.family = config.AfFamily
 	nfqueue.queue = config.NfQueue
+	nfqueue.maxQueueLen = nlenc.Uint32Bytes(config.MaxQueueLen)
 	if config.Logger == nil {
 		nfqueue.logger = log.New(new(devNull), "", 0)
 	} else {
@@ -60,20 +65,6 @@ func Open(config *Config) (*Nfqueue, error) {
 	}
 
 	return &nfqueue, nil
-}
-
-// SetFlag sets a specified flags on this socket
-func (nfqueue *Nfqueue) SetFlag(flag uint32) error {
-	if flag >= nfQaCfgFlagMax {
-		return ErrInvFlag
-	}
-	nlenc.PutUint32(nfqueue.flags, flag)
-	return nil
-}
-
-// ShowFlags returns the flags of this socket
-func (nfqueue *Nfqueue) ShowFlags() uint32 {
-	return nlenc.Uint32(nfqueue.flags)
 }
 
 // Close the connection to the netfilter queue subsystem
@@ -175,7 +166,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 	}
 
 	// set copy mode and buffer size
-	data := append(nfqueue.bufsize, copyMode)
+	data := append(nfqueue.maxPacketLen, copyMode)
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
 		{Type: nfQaCfgParams, Data: data},
 	})
@@ -189,12 +180,11 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 		attrs = append(attrs, netlink.Attribute{Type: nfQaCfgFlags, Data: nfqueue.flags})
 		attrs = append(attrs, netlink.Attribute{Type: nfQaCfgMask, Data: nfqueue.flags})
 	}
+	attrs = append(attrs, netlink.Attribute{Type: nfQaCfgQueueMaxLen, Data: nfqueue.maxQueueLen})
 
-	if len(attrs) != 0 {
-		_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, attrs)
-		if err != nil {
-			return err
-		}
+	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, attrs)
+	if err != nil {
+		return err
 	}
 
 	go func() {
@@ -216,11 +206,6 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 			if err != nil {
 				return
 			}
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
 			for _, msg := range replys {
 				if msg.Header.Type == netlink.HeaderTypeDone {
 					// this is the last message of a batch
@@ -235,6 +220,11 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 				if ret := fn(m); ret != 0 {
 					return
 				}
+			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 		}
 	}()

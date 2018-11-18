@@ -17,7 +17,13 @@ type Config struct {
 
 	AfFamily uint8
 
-	NfQueue uint16
+	NfQueue     uint16
+	MaxQueueLen uint32
+
+	MaxPacketLen uint32
+
+	Flags     uint32
+	FlagsMask uint32
 
 	// Interface to log internals.
 	Logger *log.Logger
@@ -36,7 +42,7 @@ var (
 )
 
 // Msg contains all the information of a connection
-type Msg map[int][]byte
+type Msg map[int]interface{}
 
 // nfLogSubSysQueue the netlink subsystem we will query
 const nfnlSubSysQueue = 0x03
