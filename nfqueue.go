@@ -6,12 +6,18 @@ import (
 	"context"
 	"encoding/binary"
 	"log"
+	"sync"
 
 	"github.com/mdlayher/netlink"
 	"github.com/mdlayher/netlink/nlenc"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
+
+type verdict struct {
+	sync.Mutex
+	data []netlink.Message
+}
 
 // Nfqueue represents a netfilter queue handler
 type Nfqueue struct {
@@ -27,7 +33,7 @@ type Nfqueue struct {
 	queue        uint16
 	maxQueueLen  []byte // uint32
 
-	verdicts []netlink.Message
+	verdicts verdict
 }
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
@@ -133,7 +139,9 @@ func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byt
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 
-	nfqueue.verdicts = append(nfqueue.verdicts, req)
+	nfqueue.verdicts.Lock()
+	nfqueue.verdicts.data = append(nfqueue.verdicts.data, req)
+	nfqueue.verdicts.Unlock()
 
 	return nil
 }
@@ -279,15 +287,17 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 }
 
 func (nfqueue *Nfqueue) sendVerdicts() error {
-	if len(nfqueue.verdicts) == 0 {
+	nfqueue.verdicts.Lock()
+	defer nfqueue.verdicts.Unlock()
+	if len(nfqueue.verdicts.data) == 0 {
 		return nil
 	}
-	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts)
+	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts.data)
 	if err != nil {
 		nfqueue.logger.Fatalf("Could not send verdict: %v", err)
 		return err
 	}
-	nfqueue.verdicts = []netlink.Message{}
+	nfqueue.verdicts.data = []netlink.Message{}
 
 	return nil
 }
