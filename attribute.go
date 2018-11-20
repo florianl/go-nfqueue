@@ -5,14 +5,14 @@ package nfqueue
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"time"
 
 	"github.com/mdlayher/netlink"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
-func extractAttribute(m Msg, data []byte) error {
+func extractAttribute(log *log.Logger, m Msg, data []byte) error {
 	ad, err := netlink.NewAttributeDecoder(data)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func extractAttribute(m Msg, data []byte) error {
 		case nfQaL2HDR:
 			m[AttrL2HDR] = ad.Bytes()
 		default:
-			return errors.Wrapf(ErrUnknownAttribute, "Attribute Type: 0x%x\tData: %v", ad.Type(), ad.Bytes())
+			log.Printf("Unknown attribute Type: 0x%x\tData: %v\n", ad.Type(), ad.Bytes())
 		}
 	}
 
@@ -83,11 +83,11 @@ func checkHeader(data []byte) int {
 	return 0
 }
 
-func extractAttributes(msg []byte) (Msg, error) {
+func extractAttributes(log *log.Logger, msg []byte) (Msg, error) {
 	var data = make(Msg)
 
 	offset := checkHeader(msg[:2])
-	if err := extractAttribute(data, msg[offset:]); err != nil {
+	if err := extractAttribute(log, data, msg[offset:]); err != nil {
 		return nil, err
 	}
 	return data, nil

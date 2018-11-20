@@ -31,14 +31,12 @@ type Config struct {
 
 // Various errors
 var (
-	ErrUnknownAttribute = errors.New("Received unsupported attribute")
-	ErrAfFamily         = errors.New("Unsupported AF_Family type")
-	ErrNoTimestamp      = errors.New("Timestamp was not set")
-	ErrRecvMsg          = errors.New("Received error message")
-	ErrUnexpMsg         = errors.New("Received unexpected message from kernel")
-	ErrInvFlag          = errors.New("Invalid Flag")
-	ErrNotLinux         = errors.New("Not implemented for OS other than linux")
-	ErrInvalidVerdict   = errors.New("Invalid verdict")
+	ErrAfFamily       = errors.New("Unsupported AF_Family type")
+	ErrRecvMsg        = errors.New("Received error message")
+	ErrUnexpMsg       = errors.New("Received unexpected message from kernel")
+	ErrInvFlag        = errors.New("Invalid Flag")
+	ErrNotLinux       = errors.New("Not implemented for OS other than linux")
+	ErrInvalidVerdict = errors.New("Invalid verdict")
 )
 
 // Msg contains all the information of a connection
