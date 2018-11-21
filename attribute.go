@@ -17,6 +17,7 @@ func extractAttribute(log *log.Logger, m Msg, data []byte) error {
 	if err != nil {
 		return err
 	}
+	ad.ByteOrder = binary.BigEndian
 	for ad.Next() {
 		switch ad.Type() {
 		case nfQaPacketHdr:
@@ -35,13 +36,13 @@ func extractAttribute(log *log.Logger, m Msg, data []byte) error {
 			}
 			m[AttrTimestamp] = time.Unix(sec, usec*1000)
 		case nfQaIfIndexInDev:
-			m[AttrIfIndexInDev] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrIfIndexInDev] = ad.Uint32()
 		case nfQaIfIndexOutDev:
-			m[AttrIfIndexOutDev] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrIfIndexOutDev] = ad.Uint32()
 		case nfQaIfIndexPhysInDev:
-			m[AttrIfIndexPhysInDev] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrIfIndexPhysInDev] = ad.Uint32()
 		case nfQaIfIndexPhysOutDev:
-			m[AttrIfIndexPhysOutDev] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrIfIndexPhysOutDev] = ad.Uint32()
 		case nfQaHwAddr:
 			hwAddrLen := binary.BigEndian.Uint16(ad.Bytes()[:2])
 			m[AttrHwAddr] = (ad.Bytes())[4 : 4+hwAddrLen]
@@ -52,15 +53,15 @@ func extractAttribute(log *log.Logger, m Msg, data []byte) error {
 		case nfQaCtInfo:
 			m[AttrCtInfo] = ad.Bytes()
 		case nfQaCapLen:
-			m[AttrCapLen] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrCapLen] = ad.Uint32()
 		case nfQaSkbInfo:
 			m[AttrSkbInfo] = ad.Bytes()
 		case nfQaExp:
 			m[AttrExp] = ad.Bytes()
 		case nfQaUID:
-			m[AttrUID] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrUID] = ad.Uint32()
 		case nfQaGID:
-			m[AttrGID] = binary.BigEndian.Uint32(ad.Bytes())
+			m[AttrGID] = ad.Uint32()
 		case nfQaSecCtx:
 			m[AttrSecCtx] = ad.String()
 		case nfQaL2HDR:
