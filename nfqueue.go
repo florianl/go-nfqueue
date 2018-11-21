@@ -220,7 +220,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 					// continue to receive messages
 					break
 				}
-				m, err := parseMsg(msg)
+				m, err := parseMsg(nfqueue.logger, msg)
 				if err != nil {
 					nfqueue.logger.Fatalf("Could not parse message: %v", err)
 					continue
@@ -325,7 +325,7 @@ func unmarschalErrMsg(b []byte) (ErrMsg, error) {
 	return msg, nil
 }
 
-func parseMsg(msg netlink.Message) (Msg, error) {
+func parseMsg(log *log.Logger, msg netlink.Message) (Msg, error) {
 	if msg.Header.Type&netlink.HeaderTypeError == netlink.HeaderTypeError {
 		errMsg, err := unmarschalErrMsg(msg.Data)
 		if err != nil {
@@ -333,7 +333,7 @@ func parseMsg(msg netlink.Message) (Msg, error) {
 		}
 		return nil, errors.Wrapf(ErrRecvMsg, "%#v", errMsg)
 	}
-	m, err := extractAttributes(msg.Data)
+	m, err := extractAttributes(log, msg.Data)
 	if err != nil {
 		return nil, err
 	}
