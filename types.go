@@ -47,74 +47,77 @@ const nfnlSubSysQueue = 0x03
 
 // Various identifier,that can be the key of Msg map
 const (
-	AttrPacketID          = iota
-	AttrHook              = iota
-	AttrHwProtocol        = iota
-	AttrIfIndexInDev      = iota
-	AttrIfIndexOutDev     = iota
-	AttrIfIndexPhysInDev  = iota
-	AttrIfIndexPhysOutDev = iota
-	AttrPayload           = iota
-	AttrCapLen            = iota
-	AttrTimestamp         = iota
-	AttrHwAddr            = iota
-	AttrMark              = iota
-	AttrUID               = iota
-	AttrGID               = iota
-	AttrL2HDR             = iota
-	AttrCt                = iota
-	AttrCtInfo            = iota
-	AttrSkbInfo           = iota
-	AttrExp               = iota
-	AttrSecCtx            = iota
-	AttrVlanProto         = iota
-	AttrVlanTCI           = iota
+	AttrPacketID = iota
+	AttrHook
+	AttrHwProtocol
+	AttrIfIndexInDev
+	AttrIfIndexOutDev
+	AttrIfIndexPhysInDev
+	AttrIfIndexPhysOutDev
+	AttrPayload
+	AttrCapLen
+	AttrTimestamp
+	AttrHwAddr
+	AttrMark
+	AttrUID
+	AttrGID
+	AttrL2HDR
+	AttrCt
+	AttrCtInfo
+	AttrSkbInfo
+	AttrExp
+	AttrSecCtx
+	AttrVlanProto
+	AttrVlanTCI
 )
 
 const (
-	nfQaUnspec            = iota
-	nfQaPacketHdr         = iota
-	nfQaVerdictHdr        = iota /* nfqnl_msg_verdict_hrd */
-	nfQaMark              = iota /* __u32 nfmark */
-	nfQaTimestamp         = iota /* nfqnl_msg_packet_timestamp */
-	nfQaIfIndexInDev      = iota /* __u32 ifindex */
-	nfQaIfIndexOutDev     = iota /* __u32 ifindex */
-	nfQaIfIndexPhysInDev  = iota /* __u32 ifindex */
-	nfQaIfIndexPhysOutDev = iota /* __u32 ifindex */
-	nfQaHwAddr            = iota /* nfqnl_msg_packet_hw */
-	nfQaPayload           = iota /* opaque data payload */
-	nfQaCt                = iota /* nf_conntrack_netlink.h */
-	nfQaCtInfo            = iota /* enum ip_conntrack_info */
-	nfQaCapLen            = iota /* __u32 length of captured packet */
-	nfQaSkbInfo           = iota /* __u32 skb meta information */
-	nfQaExp               = iota /* nf_conntrack_netlink.h */
-	nfQaUID               = iota /* __u32 sk uid */
-	nfQaGID               = iota /* __u32 sk gid */
-	nfQaSecCtx            = iota /* security context string */
-	nfQaVLAN              = iota /* nested attribute: packet vlan info */
-	nfQaL2HDR             = iota /* full L2 header */
-	nfMax                 = iota /* for internal use only */
+	nfQaUnspec = iota
+	nfQaPacketHdr
+	nfQaVerdictHdr        /* nfqnl_msg_verdict_hrd */
+	nfQaMark              /* __u32 nfmark */
+	nfQaTimestamp         /* nfqnl_msg_packet_timestamp */
+	nfQaIfIndexInDev      /* __u32 ifindex */
+	nfQaIfIndexOutDev     /* __u32 ifindex */
+	nfQaIfIndexPhysInDev  /* __u32 ifindex */
+	nfQaIfIndexPhysOutDev /* __u32 ifindex */
+	nfQaHwAddr            /* nfqnl_msg_packet_hw */
+	nfQaPayload           /* opaque data payload */
+	nfQaCt                /* nf_conntrack_netlink.h */
+	nfQaCtInfo            /* enum ip_conntrack_info */
+	nfQaCapLen            /* __u32 length of captured packet */
+	nfQaSkbInfo           /* __u32 skb meta information */
+	nfQaExp               /* nf_conntrack_netlink.h */
+	nfQaUID               /* __u32 sk uid */
+	nfQaGID               /* __u32 sk gid */
+	nfQaSecCtx            /* security context string */
+	nfQaVLAN              /* nested attribute: packet vlan info */
+	nfQaL2HDR             /* full L2 header */
+	nfMax                 /* for internal use only */
 )
 
 const (
-	nfQaCfgCmd         = 1 /* nfqnl_msg_config_cmd */
-	nfQaCfgParams      = 2 /* nfqnl_msg_config_params */
-	nfQaCfgQueueMaxLen = 3 /* __u32 */
-	nfQaCfgMask        = 4 /* identify which flags to change */
-	nfQaCfgFlags       = 5 /* value of these flags (__u32) */
+	_                  = iota
+	nfQaCfgCmd         /* nfqnl_msg_config_cmd */
+	nfQaCfgParams      /* nfqnl_msg_config_params */
+	nfQaCfgQueueMaxLen /* __u32 */
+	nfQaCfgMask        /* identify which flags to change */
+	nfQaCfgFlags       /* value of these flags (__u32) */
 )
 
 const (
-	nfUlnlCfgCmdBind     = 0x1
-	nfUlnlCfgCmdUnbind   = 0x2
-	nfUlnlCfgCmdPfBind   = 0x3
-	nfUlnlCfgCmdPfUnbind = 0x4
+	_ = iota
+	nfUlnlCfgCmdBind
+	nfUlnlCfgCmdUnbind
+	nfUlnlCfgCmdPfBind
+	nfUlnlCfgCmdPfUnbind
 )
 
 const (
-	nfQnlMsgVerdict      = 1 /* verdict from userspace to kernel */
-	nfQnlMsgConfig       = 2 /* connect to a particular queue */
-	nfQnlMsgVerdictBatch = 3 /* batchv from userspace to kernel */
+	_                    = iota
+	nfQnlMsgVerdict      /* verdict from userspace to kernel */
+	nfQnlMsgConfig       /* connect to a particular queue */
+	nfQnlMsgVerdictBatch /* batchv from userspace to kernel */
 
 )
 
@@ -130,16 +133,16 @@ const (
 
 // copy modes
 const (
-	NfQnlCopyNone   = 0x0
-	NfQnlCopyMeta   = 0x1
-	NfQnlCopyPacket = 0x2
+	NfQnlCopyNone = iota
+	NfQnlCopyMeta
+	NfQnlCopyPacket
 )
 
 // Verdicts
 const (
-	NfDrop   = iota
-	NfAccept = iota
-	NfStolen = iota
-	NfQeueue = iota
-	NfRepeat = iota
+	NfDrop = iota
+	NfAccept
+	NfStolen
+	NfQeueue
+	NfRepeat
 )
