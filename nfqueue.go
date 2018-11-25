@@ -51,6 +51,10 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, ErrAfFamily
 	}
 
+	if err := checkFlags(config.Flags, config.FlagsMask); err != nil {
+		return nil, err
+	}
+
 	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{NetNS: config.NetNS})
 	if err != nil {
 		return nil, err
@@ -59,11 +63,14 @@ func Open(config *Config) (*Nfqueue, error) {
 	// default size of copied packages to userspace
 	nfqueue.maxPacketLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxPacketLen, config.MaxPacketLen)
-	nfqueue.flags = nlenc.Uint32Bytes(config.Flags)
-	nfqueue.flagsMask = nlenc.Uint32Bytes(config.FlagsMask)
+	nfqueue.flags = []byte{0x00, 0x00, 0x00, 0x00}
+	binary.BigEndian.PutUint32(nfqueue.flags, config.Flags)
+	nfqueue.flagsMask = []byte{0x00, 0x00, 0x00, 0x00}
+	binary.BigEndian.PutUint32(nfqueue.flagsMask, config.FlagsMask)
 	nfqueue.family = config.AfFamily
 	nfqueue.queue = config.NfQueue
-	nfqueue.maxQueueLen = nlenc.Uint32Bytes(config.MaxQueueLen)
+	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
+	binary.BigEndian.PutUint32(nfqueue.maxQueueLen, config.MaxQueueLen)
 	if config.Logger == nil {
 		nfqueue.logger = log.New(new(devNull), "", 0)
 	} else {
@@ -71,6 +78,19 @@ func Open(config *Config) (*Nfqueue, error) {
 	}
 
 	return &nfqueue, nil
+}
+
+func checkFlags(flags, mask uint32) error {
+
+	if mask == 0 {
+		return nil
+	}
+
+	if flags >= nfQaCfgFlagMax || mask >= nfQaCfgFlagMax {
+		return ErrInvFlag
+	}
+
+	return nil
 }
 
 // Close the connection to the netfilter queue subsystem
