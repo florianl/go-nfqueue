@@ -20,6 +20,7 @@ type Config struct {
 	NfQueue     uint16
 	MaxQueueLen uint32
 
+	// Only used in combination with NfQnlCopyPacket
 	MaxPacketLen uint32
 
 	Flags     uint32
@@ -93,7 +94,6 @@ const (
 	nfQaSecCtx            /* security context string */
 	nfQaVLAN              /* nested attribute: packet vlan info */
 	nfQaL2HDR             /* full L2 header */
-	nfMax                 /* for internal use only */
 )
 
 const (
