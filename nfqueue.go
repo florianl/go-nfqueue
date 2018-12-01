@@ -99,7 +99,7 @@ func (nfqueue *Nfqueue) Close() error {
 }
 
 // SetVerdictWithMark signals the kernel the next action and the mark for a specified package id
-func (nfqueue *Nfqueue) SetVerdictWithMark(id, verdict, mark int) error {
+func (nfqueue *Nfqueue) SetVerdictWithMark(id uint32, verdict, mark int) error {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(mark))
 	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
@@ -113,16 +113,16 @@ func (nfqueue *Nfqueue) SetVerdictWithMark(id, verdict, mark int) error {
 }
 
 // SetVerdict signals the kernel the next action for a specified package id
-func (nfqueue *Nfqueue) SetVerdict(id, verdict int) error {
+func (nfqueue *Nfqueue) SetVerdict(id uint32, verdict int) error {
 	return nfqueue.setVerdict(id, verdict, false, []byte{})
 }
 
 // SetVerdictBatch signals the kernel the next action for a batch of packages till id
-func (nfqueue *Nfqueue) SetVerdictBatch(id, verdict int) error {
+func (nfqueue *Nfqueue) SetVerdictBatch(id uint32, verdict int) error {
 	return nfqueue.setVerdict(id, verdict, true, []byte{})
 }
 
-func (nfqueue *Nfqueue) setVerdict(id, verdict int, batch bool, attributes []byte) error {
+func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attributes []byte) error {
 	/*
 		struct nfqnl_msg_verdict_hdr {
 			__be32 verdict;
@@ -222,17 +222,21 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 				{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 			})
 			if err != nil {
-				nfqueue.logger.Fatalf("Could not unbind from queue: %v", err)
+				nfqueue.logger.Printf("Could not unbind from queue: %v", err)
 				return
 			}
 		}()
 		for {
-			if err := nfqueue.sendVerdicts(); err != nil {
-				return
-			}
+			nfqueue.sendVerdicts()
 			replys, err := nfqueue.Con.Receive()
 			if err != nil {
-				return
+				nfqueue.logger.Printf("Could not receive message: %v", err)
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					continue
+				}
 			}
 			for _, msg := range replys {
 				if msg.Header.Type == netlink.HeaderTypeDone {
@@ -242,7 +246,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 				}
 				m, err := parseMsg(nfqueue.logger, msg)
 				if err != nil {
-					nfqueue.logger.Fatalf("Could not parse message: %v", err)
+					nfqueue.logger.Printf("Could not parse message: %v", err)
 					continue
 				}
 				if ret := fn(m); ret != 0 {
@@ -314,7 +318,7 @@ func (nfqueue *Nfqueue) sendVerdicts() error {
 	}
 	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts.data)
 	if err != nil {
-		nfqueue.logger.Fatalf("Could not send verdict: %v", err)
+		nfqueue.logger.Printf("Could not send verdict: %v", err)
 		return err
 	}
 	nfqueue.verdicts.data = []netlink.Message{}
