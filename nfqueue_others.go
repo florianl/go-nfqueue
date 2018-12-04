@@ -25,16 +25,16 @@ func (nfe *Nfqueue) Register(_ context.Context, _ byte, _ HookFunc) error {
 }
 
 // SetVerdict is not implemented for OS other than Linux
-func (nfq *Nfqueue) SetVerdict(_, _ int) error {
+func (nfq *Nfqueue) SetVerdict(_ uint32, _ int) error {
 	return ErrNotLinux
 }
 
 // SetVerdictBatch is not implemented for OS other than Linux
-func (nfq *Nfqueue) SetVerdictBatch(_, _ int) error {
+func (nfq *Nfqueue) SetVerdictBatch(_ uint32, _ int) error {
 	return ErrNotLinux
 }
 
 // SetVerdictWithMark is not implemented for OS other than Linux
-func (nfqueue *Nfqueue) SetVerdictWithMark(_, _, _ int) error {
+func (nfqueue *Nfqueue) SetVerdictWithMark(_ uint32, _, _ int) error {
 	return ErrNotLinux
 }
