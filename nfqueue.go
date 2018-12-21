@@ -32,6 +32,7 @@ type Nfqueue struct {
 	family       uint8
 	queue        uint16
 	maxQueueLen  []byte // uint32
+	copymode     uint8
 
 	verdicts verdict
 }
@@ -46,10 +47,6 @@ func (devNull) Write(p []byte) (int, error) {
 // Open a connection to the netfilter queue subsystem
 func Open(config *Config) (*Nfqueue, error) {
 	var nfqueue Nfqueue
-
-	if config.AfFamily != unix.AF_INET6 && config.AfFamily != unix.AF_INET {
-		return nil, ErrAfFamily
-	}
 
 	if err := checkFlags(config.Flags, config.FlagsMask); err != nil {
 		return nil, err
@@ -67,7 +64,6 @@ func Open(config *Config) (*Nfqueue, error) {
 	binary.BigEndian.PutUint32(nfqueue.flags, config.Flags)
 	nfqueue.flagsMask = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.flagsMask, config.FlagsMask)
-	nfqueue.family = config.AfFamily
 	nfqueue.queue = config.NfQueue
 	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxQueueLen, config.MaxQueueLen)
@@ -76,6 +72,7 @@ func Open(config *Config) (*Nfqueue, error) {
 	} else {
 		nfqueue.logger = config.Logger
 	}
+	nfqueue.copymode = config.Copymode
 
 	return &nfqueue, nil
 }
@@ -167,7 +164,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 }
 
 // Register your own function as callback for a netfilter queue
-func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc) error {
+func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 
 	// unbinding existing handler (if any)
 	seq, err := nfqueue.setConfig(unix.AF_UNSPEC, 0, 0, []netlink.Attribute{
@@ -194,7 +191,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, copyMode byte, fn HookFunc
 	}
 
 	// set copy mode and buffer size
-	data := append(nfqueue.maxPacketLen, copyMode)
+	data := append(nfqueue.maxPacketLen, nfqueue.copymode)
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
 		{Type: nfQaCfgParams, Data: data},
 	})

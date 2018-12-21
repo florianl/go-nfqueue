@@ -20,7 +20,7 @@ func (nfq *Nfqueue) Close() error {
 }
 
 // Register is not implemented for OS other than Linux
-func (nfe *Nfqueue) Register(_ context.Context, _ byte, _ HookFunc) error {
+func (nfe *Nfqueue) Register(_ context.Context, _ HookFunc) error {
 	return ErrNotLinux
 }
 

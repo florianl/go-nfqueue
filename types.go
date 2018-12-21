@@ -11,18 +11,22 @@ type HookFunc func(m Msg) int
 
 // Config contains options for a Conn.
 type Config struct {
-	// Network namespace the Nflog needs to operate in. If set to 0 (default),
+	// Network namespace the Nfqueue needs to operate in. If set to 0 (default),
 	// no network namespace will be entered.
 	NetNS int
 
-	AfFamily uint8
-
-	NfQueue     uint16
+	// Queue this Nfqueue socket will be assigned to
+	NfQueue uint16
+	// Maximum number of packages within the Nfqueue.
 	MaxQueueLen uint32
 
-	// Only used in combination with NfQnlCopyPacket
+	// Only used in combination with NfQnlCopyPacket.
 	MaxPacketLen uint32
 
+	// Specifies how the kernel handles a packet in the nfqueue queue.
+	Copymode uint8
+
+	// Optional flags and mask for this Nfqueue socket.
 	Flags     uint32
 	FlagsMask uint32
 
@@ -32,7 +36,6 @@ type Config struct {
 
 // Various errors
 var (
-	ErrAfFamily       = errors.New("Unsupported AF_Family type")
 	ErrRecvMsg        = errors.New("Received error message")
 	ErrUnexpMsg       = errors.New("Received unexpected message from kernel")
 	ErrInvFlag        = errors.New("Invalid Flag")
