@@ -129,7 +129,7 @@ const (
 	NfQaCfgFlagFailOpen  = (1 << iota)
 	NfQaCfgFlagConntrack = (1 << iota)
 	NfQaCfgFlagGSO       = (1 << iota)
-	NfQaCfgFlagUidGid    = (1 << iota)
+	NfQaCfgFlagUIDGid    = (1 << iota)
 	NfQaCfgFlagSecCx     = (1 << iota)
 	nfQaCfgFlagMax       = (1 << iota)
 )
