@@ -15,6 +15,7 @@ func TestLinuxNfqueue(t *testing.T) {
 		NfQueue:      100,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
+		Copymode:     NfQnlCopyPacket,
 	}
 	// Open a socket to the netfilter log subsystem
 	nfq, err := Open(&config)
@@ -34,7 +35,7 @@ func TestLinuxNfqueue(t *testing.T) {
 	}
 
 	// Register your function to listen on nflog group 100
-	err = nfq.Register(ctx, NfQnlCopyPacket, fn)
+	err = nfq.Register(ctx, fn)
 	if err != nil {
 		t.Fatalf("failed to register hook function: %v", err)
 	}
