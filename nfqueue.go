@@ -65,6 +65,7 @@ func Open(config *Config) (*Nfqueue, error) {
 	nfqueue.flagsMask = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.flagsMask, config.FlagsMask)
 	nfqueue.queue = config.NfQueue
+	nfqueue.family = config.AfFamily
 	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxQueueLen, config.MaxQueueLen)
 	if config.Logger == nil {
@@ -184,7 +185,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 
 	// binding to the requested queue
 	_, err = nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
-		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, 0x0}},
+		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
 		return errors.Wrapf(err, "Could not bind to requested queue %d", nfqueue.queue)

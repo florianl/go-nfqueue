@@ -30,6 +30,9 @@ type Config struct {
 	Flags     uint32
 	FlagsMask uint32
 
+	// AfFamily for this Nfqueue socket.
+	AfFamily uint8
+
 	// Interface to log internals.
 	Logger *log.Logger
 }
