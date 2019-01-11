@@ -27,8 +27,7 @@ type Config struct {
 	Copymode uint8
 
 	// Optional flags and mask for this Nfqueue socket.
-	Flags     uint32
-	FlagsMask uint32
+	Flags uint32
 
 	// AfFamily for this Nfqueue socket.
 	AfFamily uint8

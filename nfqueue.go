@@ -27,7 +27,6 @@ type Nfqueue struct {
 	logger *log.Logger
 
 	flags        []byte // uint32
-	flagsMask    []byte // uint32
 	maxPacketLen []byte // uint32
 	family       uint8
 	queue        uint16
@@ -48,8 +47,8 @@ func (devNull) Write(p []byte) (int, error) {
 func Open(config *Config) (*Nfqueue, error) {
 	var nfqueue Nfqueue
 
-	if err := checkFlags(config.Flags, config.FlagsMask); err != nil {
-		return nil, err
+	if config.Flags >= nfQaCfgFlagMax {
+		return nil, ErrInvFlag
 	}
 
 	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{NetNS: config.NetNS})
@@ -62,8 +61,6 @@ func Open(config *Config) (*Nfqueue, error) {
 	binary.BigEndian.PutUint32(nfqueue.maxPacketLen, config.MaxPacketLen)
 	nfqueue.flags = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.flags, config.Flags)
-	nfqueue.flagsMask = []byte{0x00, 0x00, 0x00, 0x00}
-	binary.BigEndian.PutUint32(nfqueue.flagsMask, config.FlagsMask)
 	nfqueue.queue = config.NfQueue
 	nfqueue.family = config.AfFamily
 	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
@@ -76,19 +73,6 @@ func Open(config *Config) (*Nfqueue, error) {
 	nfqueue.copymode = config.Copymode
 
 	return &nfqueue, nil
-}
-
-func checkFlags(flags, mask uint32) error {
-
-	if mask == 0 {
-		return nil
-	}
-
-	if flags >= nfQaCfgFlagMax || mask >= nfQaCfgFlagMax {
-		return ErrInvFlag
-	}
-
-	return nil
 }
 
 // Close the connection to the netfilter queue subsystem
