@@ -26,7 +26,7 @@ type Config struct {
 	// Specifies how the kernel handles a packet in the nfqueue queue.
 	Copymode uint8
 
-	// Optional flags and mask for this Nfqueue socket.
+	// Optional flags for this Nfqueue socket.
 	Flags uint32
 
 	// AfFamily for this Nfqueue socket.

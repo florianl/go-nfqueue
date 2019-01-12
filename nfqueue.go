@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/mdlayher/netlink"
-	"github.com/mdlayher/netlink/nlenc"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
@@ -308,37 +307,7 @@ func (nfqueue *Nfqueue) sendVerdicts() error {
 	return nil
 }
 
-// ErrMsg as defined in nlmsgerr
-type ErrMsg struct {
-	Code  int
-	Len   uint32
-	Type  uint16
-	Flags uint16
-	Seq   uint32
-	Pid   uint32
-}
-
-func unmarschalErrMsg(b []byte) (ErrMsg, error) {
-	var msg ErrMsg
-
-	msg.Code = int(nlenc.Uint32(b[0:4]))
-	msg.Len = nlenc.Uint32(b[4:8])
-	msg.Type = nlenc.Uint16(b[8:10])
-	msg.Flags = nlenc.Uint16(b[10:12])
-	msg.Seq = nlenc.Uint32(b[12:16])
-	msg.Pid = nlenc.Uint32(b[16:20])
-
-	return msg, nil
-}
-
 func parseMsg(log *log.Logger, msg netlink.Message) (Msg, error) {
-	if msg.Header.Type&netlink.HeaderTypeError == netlink.HeaderTypeError {
-		errMsg, err := unmarschalErrMsg(msg.Data)
-		if err != nil {
-			return nil, err
-		}
-		return nil, errors.Wrapf(ErrRecvMsg, "%#v", errMsg)
-	}
 	m, err := extractAttributes(log, msg.Data)
 	if err != nil {
 		return nil, err
