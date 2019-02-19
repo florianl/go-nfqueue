@@ -24,7 +24,8 @@ func TestLinuxNfqueue(t *testing.T) {
 	}
 	defer nfq.Close()
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	fn := func(m Msg) int {
 		id := m[AttrPacketID].(uint32)
