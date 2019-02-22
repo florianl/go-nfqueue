@@ -119,10 +119,10 @@ const (
 )
 
 const (
-	_                    = iota
+	nfQnlMsgPacket       = iota
 	nfQnlMsgVerdict      /* verdict from userspace to kernel */
 	nfQnlMsgConfig       /* connect to a particular queue */
-	nfQnlMsgVerdictBatch /* batchv from userspace to kernel */
+	nfQnlMsgVerdictBatch /* batch from userspace to kernel */
 
 )
 
