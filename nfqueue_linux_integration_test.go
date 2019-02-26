@@ -4,7 +4,6 @@ package nfqueue
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 )
@@ -30,7 +29,7 @@ func TestLinuxNfqueue(t *testing.T) {
 	fn := func(m Msg) int {
 		id := m[AttrPacketID].(uint32)
 		// Just print out the id and payload of the nfqueue packet
-		fmt.Printf("[%d]\t%v\n", id, m[AttrPayload])
+		t.Logf("[%d]\t%v\n", id, m[AttrPayload])
 		nfq.SetVerdict(id, NfAccept)
 		return 0
 	}
