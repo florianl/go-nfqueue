@@ -6,17 +6,12 @@ import (
 	"context"
 	"encoding/binary"
 	"log"
-	"sync"
+	"time"
 
 	"github.com/mdlayher/netlink"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
-
-type verdict struct {
-	sync.Mutex
-	data []netlink.Message
-}
 
 // Nfqueue represents a netfilter queue handler
 type Nfqueue struct {
@@ -31,8 +26,6 @@ type Nfqueue struct {
 	queue        uint16
 	maxQueueLen  []byte // uint32
 	copymode     uint8
-
-	verdicts verdict
 }
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
@@ -129,7 +122,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 	data = append(data, attributes...)
 	req := netlink.Message{
 		Header: netlink.Header{
-			Flags:    netlink.HeaderFlagsRequest,
+			Flags:    netlink.Request,
 			Sequence: 0,
 		},
 		Data: data,
@@ -140,11 +133,9 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 
-	nfqueue.verdicts.Lock()
-	nfqueue.verdicts.data = append(nfqueue.verdicts.data, req)
-	nfqueue.verdicts.Unlock()
+	_, sErr := nfqueue.Con.Execute(req)
+	return sErr
 
-	return nil
 }
 
 // Register your own function as callback for a netfilter queue
@@ -208,7 +199,8 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 			}
 		}()
 		for {
-			nfqueue.sendVerdicts()
+			deadline := time.Now().Add(10 * time.Millisecond)
+			nfqueue.Con.SetReadDeadline(deadline)
 			replys, err := nfqueue.Con.Receive()
 			if err != nil {
 				nfqueue.logger.Printf("Could not receive message: %v", err)
@@ -220,7 +212,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 				}
 			}
 			for _, msg := range replys {
-				if msg.Header.Type == netlink.HeaderTypeDone {
+				if msg.Header.Type == netlink.Done {
 					// this is the last message of a batch
 					// continue to receive messages
 					break
@@ -262,7 +254,7 @@ func (nfqueue *Nfqueue) setConfig(afFamily uint8, oseq uint32, resid uint16, att
 	req := netlink.Message{
 		Header: netlink.Header{
 			Type:     netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgConfig),
-			Flags:    netlink.HeaderFlagsRequest | netlink.HeaderFlagsAcknowledge,
+			Flags:    netlink.Request | netlink.Acknowledge,
 			Sequence: oseq,
 		},
 		Data: data,
@@ -289,22 +281,6 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	}
 
 	return seq, nil
-}
-
-func (nfqueue *Nfqueue) sendVerdicts() error {
-	nfqueue.verdicts.Lock()
-	defer nfqueue.verdicts.Unlock()
-	if len(nfqueue.verdicts.data) == 0 {
-		return nil
-	}
-	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts.data)
-	if err != nil {
-		nfqueue.logger.Printf("Could not send verdict: %v", err)
-		return err
-	}
-	nfqueue.verdicts.data = []netlink.Message{}
-
-	return nil
 }
 
 func parseMsg(log *log.Logger, msg netlink.Message) (Msg, error) {
