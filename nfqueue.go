@@ -26,6 +26,8 @@ type Nfqueue struct {
 	queue        uint16
 	maxQueueLen  []byte // uint32
 	copymode     uint8
+	readTimeout  time.Duration
+	writeTimeout time.Duration
 }
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
@@ -63,6 +65,9 @@ func Open(config *Config) (*Nfqueue, error) {
 		nfqueue.logger = config.Logger
 	}
 	nfqueue.copymode = config.Copymode
+
+	nfqueue.readTimeout = config.ReadTimeout
+	nfqueue.writeTimeout = config.WriteTimeout
 
 	return &nfqueue, nil
 }
@@ -133,6 +138,8 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 
+	deadline := time.Now().Add(nfqueue.writeTimeout)
+	nfqueue.Con.SetWriteDeadline(deadline)
 	_, sErr := nfqueue.Con.Execute(req)
 	return sErr
 
@@ -199,7 +206,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 			}
 		}()
 		for {
-			deadline := time.Now().Add(10 * time.Millisecond)
+			deadline := time.Now().Add(nfqueue.readTimeout)
 			nfqueue.Con.SetReadDeadline(deadline)
 			replys, err := nfqueue.Con.Receive()
 			if err != nil {

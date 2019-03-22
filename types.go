@@ -3,6 +3,7 @@ package nfqueue
 import (
 	"errors"
 	"log"
+	"time"
 )
 
 // HookFunc is a function, that receives events from a Netlinkgroup
@@ -31,6 +32,12 @@ type Config struct {
 
 	// AfFamily for this Nfqueue socket.
 	AfFamily uint8
+
+	// Time till a read action times out
+	ReadTimeout time.Duration
+
+	// Time till a write action times out
+	WriteTimeout time.Duration
 
 	// Interface to log internals.
 	Logger *log.Logger
