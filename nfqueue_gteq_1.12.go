@@ -19,14 +19,14 @@ type Nfqueue struct {
 
 	logger *log.Logger
 
-	flags        []byte // uint32
-	maxPacketLen []byte // uint32
-	family       uint8
-	queue        uint16
-	maxQueueLen  []byte // uint32
-	copymode     uint8
-	readTimeout  time.Duration
-	writeTimeout time.Duration
+	flags           []byte // uint32
+	maxPacketLen    []byte // uint32
+	family          uint8
+	queue           uint16
+	maxQueueLen     []byte // uint32
+	copymode        uint8
+	setReadTimeout  func()
+	setWriteTimeout func()
 }
 
 // Open a connection to the netfilter queue subsystem
@@ -58,8 +58,22 @@ func Open(config *Config) (*Nfqueue, error) {
 	}
 	nfqueue.copymode = config.Copymode
 
-	nfqueue.readTimeout = config.ReadTimeout
-	nfqueue.writeTimeout = config.WriteTimeout
+	if config.ReadTimeout > 0 {
+		nfqueue.setReadTimeout = func() {
+			deadline := time.Now().Add(config.ReadTimeout)
+			nfqueue.Con.SetReadDeadline(deadline)
+		}
+	} else {
+		nfqueue.setReadTimeout = func() {}
+	}
+	if config.WriteTimeout > 0 {
+		nfqueue.setWriteTimeout = func() {
+			deadline := time.Now().Add(config.WriteTimeout)
+			nfqueue.Con.SetWriteDeadline(deadline)
+		}
+	} else {
+		nfqueue.setWriteTimeout = func() {}
+	}
 
 	return &nfqueue, nil
 }
@@ -101,8 +115,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 
-	deadline := time.Now().Add(nfqueue.writeTimeout)
-	nfqueue.Con.SetWriteDeadline(deadline)
+	nfqueue.setWriteTimeout()
 	_, sErr := nfqueue.Con.Execute(req)
 	return sErr
 
@@ -120,8 +133,7 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 		}
 	}()
 	for {
-		deadline := time.Now().Add(nfqueue.readTimeout)
-		nfqueue.Con.SetReadDeadline(deadline)
+		nfqueue.setReadTimeout()
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
 			nfqueue.logger.Printf("Could not receive message: %v", err)
