@@ -10,13 +10,15 @@ import (
 
 func TestTimeout(t *testing.T) {
 
+	timeout := 10 * time.Millisecond
+
 	// Set configuration options for nfqueue
 	config := Config{
 		NfQueue:      123,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
 		Copymode:     NfQnlCopyPacket,
-		ReadTimeout:  10 * time.Millisecond,
+		ReadTimeout:  timeout,
 	}
 
 	nfq, err := Open(&config)
@@ -25,7 +27,7 @@ func TestTimeout(t *testing.T) {
 	}
 	defer nfq.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	fn := func(m Msg) int {
