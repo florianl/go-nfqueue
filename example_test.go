@@ -20,6 +20,8 @@ func ExampleNfqueue_Register() {
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
 		Copymode:     nfqueue.NfQnlCopyPacket,
+		ReadTimeout:  10 * time.Millisecond,
+		WriteTimeout: 15 * time.Millisecond,
 	}
 
 	nf, err := nfqueue.Open(&config)

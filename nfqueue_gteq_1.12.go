@@ -25,8 +25,8 @@ type Nfqueue struct {
 	queue           uint16
 	maxQueueLen     []byte // uint32
 	copymode        uint8
-	setReadTimeout  func()
-	setWriteTimeout func()
+	setReadTimeout  func() error
+	setWriteTimeout func() error
 }
 
 // Open a connection to the netfilter queue subsystem
@@ -59,20 +59,20 @@ func Open(config *Config) (*Nfqueue, error) {
 	nfqueue.copymode = config.Copymode
 
 	if config.ReadTimeout > 0 {
-		nfqueue.setReadTimeout = func() {
+		nfqueue.setReadTimeout = func() error {
 			deadline := time.Now().Add(config.ReadTimeout)
-			nfqueue.Con.SetReadDeadline(deadline)
+			return nfqueue.Con.SetReadDeadline(deadline)
 		}
 	} else {
-		nfqueue.setReadTimeout = func() {}
+		nfqueue.setReadTimeout = func() error { return nil }
 	}
 	if config.WriteTimeout > 0 {
-		nfqueue.setWriteTimeout = func() {
+		nfqueue.setWriteTimeout = func() error {
 			deadline := time.Now().Add(config.WriteTimeout)
-			nfqueue.Con.SetWriteDeadline(deadline)
+			return nfqueue.Con.SetWriteDeadline(deadline)
 		}
 	} else {
-		nfqueue.setWriteTimeout = func() {}
+		nfqueue.setWriteTimeout = func() error { return nil }
 	}
 
 	return &nfqueue, nil
@@ -115,7 +115,9 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 		req.Header.Type = netlink.HeaderType((nfnlSubSysQueue << 8) | nfQnlMsgVerdict)
 	}
 
-	nfqueue.setWriteTimeout()
+	if err := nfqueue.setWriteTimeout(); err != nil {
+		nfqueue.logger.Printf("could not set write timeout: %v", err)
+	}
 	_, sErr := nfqueue.Con.Execute(req)
 	return sErr
 
@@ -133,7 +135,9 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 		}
 	}()
 	for {
-		nfqueue.setReadTimeout()
+		if err := nfqueue.setReadTimeout(); err != nil {
+			nfqueue.logger.Printf("could not set read timeout: %v", err)
+		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
 			nfqueue.logger.Printf("Could not receive message: %v", err)
