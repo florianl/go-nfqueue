@@ -20,7 +20,7 @@ func (nfq *Nfqueue) Close() error {
 }
 
 // Register is not implemented for OS other than Linux
-func (nfe *Nfqueue) Register(_ context.Context, _ HookFunc) error {
+func (nfq *Nfqueue) Register(_ context.Context, _ HookFunc) error {
 	return ErrNotLinux
 }
 
@@ -35,6 +35,6 @@ func (nfq *Nfqueue) SetVerdictBatch(_ uint32, _ int) error {
 }
 
 // SetVerdictWithMark is not implemented for OS other than Linux
-func (nfqueue *Nfqueue) SetVerdictWithMark(_ uint32, _, _ int) error {
+func (nfq *Nfqueue) SetVerdictWithMark(_ uint32, _, _ int) error {
 	return ErrNotLinux
 }
