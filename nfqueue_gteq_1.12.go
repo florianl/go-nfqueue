@@ -118,7 +118,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 	if err := nfqueue.setWriteTimeout(); err != nil {
 		nfqueue.logger.Printf("could not set write timeout: %v", err)
 	}
-	_, sErr := nfqueue.Con.Execute(req)
+	_, sErr := nfqueue.Con.Send(req)
 	return sErr
 
 }
