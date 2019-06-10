@@ -13,7 +13,7 @@ install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qq update       ; fi
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo modprobe nfnetlink_queue ; fi
     - go get golang.org/x/lint/golint
-    - go get -d ./...
+    - go get -d -t ./...
 
 before_script:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo ip6tables -I OUTPUT -p ipv6-icmp -j NFQUEUE --queue-num 100 ; fi

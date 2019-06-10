@@ -148,10 +148,10 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	return seq, nil
 }
 
-func parseMsg(log *log.Logger, msg netlink.Message) (Msg, error) {
-	m, err := extractAttributes(log, msg.Data)
+func parseMsg(log *log.Logger, msg netlink.Message) (Attribute, error) {
+	a, err := extractAttributes(log, msg.Data)
 	if err != nil {
-		return nil, err
+		return a, err
 	}
-	return m, nil
+	return a, nil
 }
