@@ -15,6 +15,7 @@ func TestLinuxNfqueue(t *testing.T) {
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
 		Copymode:     NfQnlCopyPacket,
+		ReadTimeout: 10 * time.Millisecond,
 	}
 	// Open a socket to the netfilter log subsystem
 	nfq, err := Open(&config)
@@ -26,10 +27,10 @@ func TestLinuxNfqueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	fn := func(m Msg) int {
-		id := m[AttrPacketID].(uint32)
+	fn := func(a Attribute) int {
+		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
-		t.Logf("[%d]\t%v\n", id, m[AttrPayload])
+		t.Logf("[%d]\t%v\n", id, *a.Payload)
 		nfq.SetVerdict(id, NfAccept)
 		return 0
 	}

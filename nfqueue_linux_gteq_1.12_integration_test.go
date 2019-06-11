@@ -30,10 +30,10 @@ func TestTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	fn := func(m Msg) int {
-		id := m[AttrPacketID].(uint32)
+	fn := func(a Attribute) int {
+		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
-		t.Logf("[%d]\t%v\n", id, m[AttrPayload])
+		t.Logf("[%d]\t%v\n", id, *a.Payload)
 		nfq.SetVerdict(id, NfAccept)
 		return 0
 	}

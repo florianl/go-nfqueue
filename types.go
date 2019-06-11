@@ -6,9 +6,36 @@ import (
 	"time"
 )
 
+// Attribute contains various elements for nfqueue elements.
+// As not every value is contained in every nfqueue message,
+// the elements inside Attribute are pointers to these values
+// or nil, if not present.
+type Attribute struct {
+	PacketID   *uint32
+	Hook       *uint8
+	Timestamp  *time.Time
+	Mark       *uint32
+	InDev      *uint32
+	PhysInDev  *uint32
+	OutDev     *uint32
+	PhysOutDev *uint32
+	Payload    *[]byte
+	CapLen     *uint32
+	UID        *uint32
+	GID        *uint32
+	SecCtx     *string
+	L2Hdr      *[]byte
+	HwAddr     *[]byte
+	HwProtocol *uint16
+	Ct         *[]byte
+	CtInfo     *uint32
+	SkbInfo    *[]byte
+	Exp        *[]byte
+}
+
 // HookFunc is a function, that receives events from a Netlinkgroup
 // To stop receiving messages on this HookFunc, return something different than 0
-type HookFunc func(m Msg) int
+type HookFunc func(a Attribute) int
 
 // Config contains options for a Conn.
 type Config struct {
@@ -52,37 +79,8 @@ var (
 	ErrInvalidVerdict = errors.New("Invalid verdict")
 )
 
-// Msg contains all the information of a connection
-type Msg map[int]interface{}
-
 // nfLogSubSysQueue the netlink subsystem we will query
 const nfnlSubSysQueue = 0x03
-
-// Various identifier,that can be the key of Msg map
-const (
-	AttrPacketID = iota
-	AttrHook
-	AttrHwProtocol
-	AttrIfIndexInDev
-	AttrIfIndexOutDev
-	AttrIfIndexPhysInDev
-	AttrIfIndexPhysOutDev
-	AttrPayload
-	AttrCapLen
-	AttrTimestamp
-	AttrHwAddr
-	AttrMark
-	AttrUID
-	AttrGID
-	AttrL2HDR
-	AttrCt
-	AttrCtInfo
-	AttrSkbInfo
-	AttrExp
-	AttrSecCtx
-	AttrVlanProto
-	AttrVlanTCI
-)
 
 const (
 	nfQaUnspec = iota

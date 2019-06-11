@@ -34,10 +34,10 @@ func ExampleNfqueue_Register() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	fn := func(m nfqueue.Msg) int {
-		id := m[nfqueue.AttrPacketID].(uint32)
+	fn := func(a nfqueue.Attribute) int {
+		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
-		fmt.Printf("[%d]\t%v\n", id, m[nfqueue.AttrPayload])
+		fmt.Printf("[%d]\t%v\n", id, *a.Payload)
 		nf.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
