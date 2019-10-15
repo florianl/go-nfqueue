@@ -1,4 +1,4 @@
-//+build go1.12,linux
+//+build go1.12
 
 package nfqueue
 
@@ -8,8 +8,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/florianl/go-nfqueue/internal/unix"
+
 	"github.com/mdlayher/netlink"
-	"golang.org/x/sys/unix"
 )
 
 // Nfqueue represents a netfilter queue handler

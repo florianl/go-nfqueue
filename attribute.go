@@ -1,5 +1,3 @@
-//+build linux
-
 package nfqueue
 
 import (
@@ -8,8 +6,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/florianl/go-nfqueue/internal/unix"
+
 	"github.com/mdlayher/netlink"
-	"golang.org/x/sys/unix"
 )
 
 func extractAttribute(log *log.Logger, a *Attribute, data []byte) error {
