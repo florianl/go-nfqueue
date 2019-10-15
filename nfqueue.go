@@ -1,5 +1,3 @@
-//+build linux
-
 package nfqueue
 
 import (
@@ -7,9 +5,10 @@ import (
 	"encoding/binary"
 	"log"
 
+	"github.com/florianl/go-nfqueue/internal/unix"
+
 	"github.com/mdlayher/netlink"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 )
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
