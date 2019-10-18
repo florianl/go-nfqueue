@@ -15,7 +15,7 @@ func TestLinuxNfqueue(t *testing.T) {
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
 		Copymode:     NfQnlCopyPacket,
-		ReadTimeout: 10 * time.Millisecond,
+		ReadTimeout:  10 * time.Millisecond,
 	}
 	// Open a socket to the netfilter log subsystem
 	nfq, err := Open(&config)
