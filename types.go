@@ -72,11 +72,11 @@ type Config struct {
 
 // Various errors
 var (
-	ErrRecvMsg        = errors.New("Received error message")
-	ErrUnexpMsg       = errors.New("Received unexpected message from kernel")
-	ErrInvFlag        = errors.New("Invalid Flag")
-	ErrNotLinux       = errors.New("Not implemented for OS other than linux")
-	ErrInvalidVerdict = errors.New("Invalid verdict")
+	ErrRecvMsg        = errors.New("received error message")
+	ErrUnexpMsg       = errors.New("received unexpected message from kernel")
+	ErrInvFlag        = errors.New("invalid Flag")
+	ErrNotLinux       = errors.New("not implemented for OS other than linux")
+	ErrInvalidVerdict = errors.New("invalid verdict")
 )
 
 // nfLogSubSysQueue the netlink subsystem we will query
