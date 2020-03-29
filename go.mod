@@ -1,10 +1,9 @@
-module github.com/florianl/go-nfqueue
+module github.com/twistlock/go-nfqueue
+
+go 1.12
 
 require (
-	github.com/mdlayher/netlink v1.0.0
-	github.com/pkg/errors v0.8.1
-	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a // indirect
-	golang.org/x/sys v0.0.0-20191204072324-ce4227a45e2e
+	github.com/mdlayher/netlink v1.1.0
+	github.com/pkg/errors v0.9.1
+	golang.org/x/sys v0.0.0-20200327173247-9dae0f8f5775
 )
-
-go 1.13

@@ -8,7 +8,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/florianl/go-nfqueue/internal/unix"
+	"github.com/twistlock/go-nfqueue/internal/unix"
 
 	"github.com/mdlayher/netlink"
 )

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	nfqueue "github.com/florianl/go-nfqueue"
+	nfqueue "github.com/twistlock/go-nfqueue"
 )
 
 func ExampleNfqueue_Register() {
