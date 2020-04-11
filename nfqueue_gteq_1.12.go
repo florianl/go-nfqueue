@@ -136,18 +136,23 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 		}
 	}()
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		if err := nfqueue.setReadTimeout(); err != nil {
 			nfqueue.logger.Printf("could not set read timeout: %v", err)
 		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
-			nfqueue.logger.Printf("Could not receive message: %v", err)
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				continue
+			if opError, ok := err.(*netlink.OpError); ok {
+				if opError.Timeout() || opError.Temporary() {
+					continue
+				}
 			}
+			nfqueue.logger.Printf("Could not receive message: %v", err)
+			return
 		}
 		for _, msg := range replys {
 			if msg.Header.Type == netlink.Done {
