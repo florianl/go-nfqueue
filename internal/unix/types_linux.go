@@ -1,16 +1,12 @@
 // +build linux
 
-/*
-	Package unix maps constants from golang.org/x/sys/unix to local constant
-s and makes
-	them available for other platforms as well.
-*/
 package unix
 
 import (
 	linux "golang.org/x/sys/unix"
 )
 
+// various constants
 const (
 	AF_INET           = linux.AF_INET
 	AF_INET6          = linux.AF_INET6
