@@ -120,7 +120,7 @@ func (nfqueue *Nfqueue) sendVerdicts() error {
 	}
 	_, err := nfqueue.Con.SendMessages(nfqueue.verdicts.data)
 	if err != nil {
-		nfqueue.logger.Printf("Could not send verdict: %v", err)
+		nfqueue.logger.Printf("Could not send verdict: %v\n", err)
 		return err
 	}
 	nfqueue.verdicts.data = []netlink.Message{}
@@ -135,21 +135,27 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 			{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 		})
 		if err != nil {
-			nfqueue.logger.Printf("Could not unbind from queue: %v", err)
+			nfqueue.logger.Printf("Could not unbind from queue: %v\n", err)
 			return
 		}
 	}()
 	for {
-		nfqueue.sendVerdicts()
+		if err := ctx.Err(); err != nil {
+			nfqueue.logger.Printf("Stop receiving nfqueue messages: %v\n", err)
+			return
+		}
+		if err := nfqueue.sendVerdicts(); err != nil {
+			nfqueue.logger.Printf("Could not send verdict(s): %v\n", err)
+		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
-			nfqueue.logger.Printf("Could not receive message: %v", err)
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				continue
+			if opError, ok := err.(*netlink.OpError); ok {
+				if opError.Timeout() || opError.Temporary() {
+					continue
+				}
 			}
+			nfqueue.logger.Printf("Could not receive message: %v\n", err)
+			return
 		}
 		for _, msg := range replys {
 			if msg.Header.Type == netlink.Done {
@@ -159,17 +165,12 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 			}
 			m, err := parseMsg(nfqueue.logger, msg)
 			if err != nil {
-				nfqueue.logger.Printf("Could not parse message: %v", err)
+				nfqueue.logger.Printf("Could not parse message: %v\n", err)
 				continue
 			}
 			if ret := fn(m); ret != 0 {
 				return
 			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		default:
 		}
 	}
 }

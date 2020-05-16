@@ -117,7 +117,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 	}
 
 	if err := nfqueue.setWriteTimeout(); err != nil {
-		nfqueue.logger.Printf("could not set write timeout: %v", err)
+		nfqueue.logger.Printf("could not set write timeout: %v\n", err)
 	}
 	_, sErr := nfqueue.Con.Send(req)
 	return sErr
@@ -131,18 +131,17 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 			{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 		})
 		if err != nil {
-			nfqueue.logger.Printf("Could not unbind from queue: %v", err)
+			nfqueue.logger.Printf("Could not unbind from queue: %v\n", err)
 			return
 		}
 	}()
 	for {
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
+			nfqueue.logger.Printf("Stop receiving nfqueue messages: %v\n", err)
 			return
-		default:
 		}
 		if err := nfqueue.setReadTimeout(); err != nil {
-			nfqueue.logger.Printf("could not set read timeout: %v", err)
+			nfqueue.logger.Printf("could not set read timeout: %v\n", err)
 		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
@@ -151,7 +150,7 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 					continue
 				}
 			}
-			nfqueue.logger.Printf("Could not receive message: %v", err)
+			nfqueue.logger.Printf("Could not receive message: %v\n", err)
 			return
 		}
 		for _, msg := range replys {
@@ -168,11 +167,6 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 			if ret := fn(m); ret != 0 {
 				return
 			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		default:
 		}
 	}
 }
