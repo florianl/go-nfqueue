@@ -128,7 +128,7 @@ func (nfqueue *Nfqueue) sendVerdicts() error {
 	return nil
 }
 
-func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uint32) {
+func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn ErrorFunc, seq uint32) {
 	defer func() {
 		// unbinding from queue
 		_, err := nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
@@ -149,13 +149,10 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, seq uin
 		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {
-			if opError, ok := err.(*netlink.OpError); ok {
-				if opError.Timeout() || opError.Temporary() {
-					continue
-				}
+			if ret := errfn(err); ret != 0 {
+				return
 			}
-			nfqueue.logger.Printf("Could not receive message: %v\n", err)
-			return
+			continue
 		}
 		for _, msg := range replys {
 			if msg.Header.Type == netlink.Done {
