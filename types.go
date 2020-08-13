@@ -34,8 +34,12 @@ type Attribute struct {
 }
 
 // HookFunc is a function, that receives events from a Netlinkgroup
-// To stop receiving messages on this HookFunc, return something different than 0
+// To stop receiving messages on this HookFunc, return something different than 0.
 type HookFunc func(a Attribute) int
+
+// ErrorFunc is a function that receives all errors that happen while reading
+// from a Netlinkgroup. To stop receiving messages return something different than 0.
+type ErrorFunc func(e error) int
 
 // Config contains options for a Conn.
 type Config struct {

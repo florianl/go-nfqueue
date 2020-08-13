@@ -77,7 +77,20 @@ func (nfqueue *Nfqueue) SetVerdictBatch(id uint32, verdict int) error {
 
 // Register your own function as callback for a netfilter queue
 func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
+	return nfqueue.RegisterWithErrorFunc(ctx, fn, func(err error) int {
+		if opError, ok := err.(*netlink.OpError); ok {
+			if opError.Timeout() || opError.Temporary() {
+				return 0
+			}
+		}
+		nfqueue.logger.Printf("Could not receive message: %v\n", err)
+		return 1
+	})
+}
 
+// RegisterWithErrorFunc is like Register but allows custom error handling
+// for errors encountered when reading from the underlying netlink socket.
+func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, errfn ErrorFunc) error {
 	// unbinding existing handler (if any)
 	seq, err := nfqueue.setConfig(unix.AF_UNSPEC, 0, 0, []netlink.Attribute{
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfUnbind, 0x0, 0x0, byte(nfqueue.family)}},
@@ -124,7 +137,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 		return err
 	}
 
-	go nfqueue.socketCallback(ctx, fn, seq)
+	go nfqueue.socketCallback(ctx, fn, errfn, seq)
 
 	return nil
 }
