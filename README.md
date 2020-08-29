@@ -10,7 +10,7 @@ This package processes information directly from the kernel and therefore it req
 	setcap 'cap_net_admin=+ep' /your/executable
 ```
 
-For documentation and more examples please take a look at [![GoDoc](https://godoc.org/github.com/florianl/go-nfqueue?status.svg)](https://godoc.org/github.com/florianl/go-nfqueue)
+For documentation and more examples please take a look at [documentation](https://pkg.go.dev/github.com/florianl/go-nfqueue).
 
 ## Requirements
 
