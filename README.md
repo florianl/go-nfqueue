@@ -3,8 +3,7 @@ go-nfqueue [![PkgGoDev](https://pkg.go.dev/badge/github.com/florianl/go-nfqueue)
 
 This is `go-nfqueue` and it is written in [golang](https://golang.org/). It provides a [C](https://en.wikipedia.org/wiki/C_(programming_language))-binding free API to the netfilter based queue subsystem of the [Linux kernel](https://www.kernel.org).
 
-Privileges
-----------
+## Privileges
 
 This package processes information directly from the kernel and therefore it requires special privileges. You can provide this privileges by adjusting the `CAP_NET_ADMIN` capabilities.
 ```
@@ -12,3 +11,7 @@ This package processes information directly from the kernel and therefore it req
 ```
 
 For documentation and more examples please take a look at [![GoDoc](https://godoc.org/github.com/florianl/go-nfqueue?status.svg)](https://godoc.org/github.com/florianl/go-nfqueue)
+
+## Requirements
+
+* A version of Go that is [supported by upstream](https://golang.org/doc/devel/release.html#policy)
