@@ -75,7 +75,13 @@ func (nfqueue *Nfqueue) SetVerdictBatch(id uint32, verdict int) error {
 	return nfqueue.setVerdict(id, verdict, true, []byte{})
 }
 
-// Register your own function as callback for a netfilter queue
+// Register your own function as callback for a netfilter queue.
+//
+// The registered callback will stop receiving data if an error
+// happened. To handle errors and continue receiving data with the
+// registered callback use RegisterWithErrorFunc() instead.
+//
+// Deprecated: Use RegisterWithErrorFunc() instead.
 func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 	return nfqueue.RegisterWithErrorFunc(ctx, fn, func(err error) int {
 		if opError, ok := err.(*netlink.OpError); ok {
@@ -88,8 +94,8 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 	})
 }
 
-// RegisterWithErrorFunc is like Register but allows custom error handling
-// for errors encountered when reading from the underlying netlink socket.
+// RegisterWithErrorFunc attaches a callback function to a netfilter queue and allows
+// custom error handling for errors encountered when reading from the underlying netlink socket.
 func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, errfn ErrorFunc) error {
 	// unbinding existing handler (if any)
 	seq, err := nfqueue.setConfig(unix.AF_UNSPEC, 0, 0, []netlink.Attribute{
