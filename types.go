@@ -64,7 +64,8 @@ type Config struct {
 	// AfFamily for this Nfqueue socket.
 	AfFamily uint8
 
-	// Time till a read action times out - only available for Go >= 1.12
+	// Deprecated: Cancel the context passed to RegisterWithErrorFunc() or Register()
+	// to remove the hook from the nfqueue gracefully.
 	ReadTimeout time.Duration
 
 	// Time till a write action times out - only available for Go >= 1.12

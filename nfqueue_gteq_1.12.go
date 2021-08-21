@@ -27,9 +27,6 @@ type Nfqueue struct {
 	maxQueueLen  []byte // uint32
 	copymode     uint8
 
-	// Deprecated: Cancel the context passed to RegisterWithErrorFunc() or Register()
-	// to remove the hook from the nfqueue gracefully.
-	setReadTimeout  func() error
 	setWriteTimeout func() error
 }
 
