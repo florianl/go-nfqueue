@@ -20,12 +20,15 @@ type Nfqueue struct {
 
 	logger *log.Logger
 
-	flags           []byte // uint32
-	maxPacketLen    []byte // uint32
-	family          uint8
-	queue           uint16
-	maxQueueLen     []byte // uint32
-	copymode        uint8
+	flags        []byte // uint32
+	maxPacketLen []byte // uint32
+	family       uint8
+	queue        uint16
+	maxQueueLen  []byte // uint32
+	copymode     uint8
+
+	// Deprecated: Cancel the context passed to RegisterWithErrorFunc() or Register()
+	// to remove the hook from the nfqueue gracefully.
 	setReadTimeout  func() error
 	setWriteTimeout func() error
 }
@@ -59,14 +62,6 @@ func Open(config *Config) (*Nfqueue, error) {
 	}
 	nfqueue.copymode = config.Copymode
 
-	if config.ReadTimeout > 0 {
-		nfqueue.setReadTimeout = func() error {
-			deadline := time.Now().Add(config.ReadTimeout)
-			return nfqueue.Con.SetReadDeadline(deadline)
-		}
-	} else {
-		nfqueue.setReadTimeout = func() error { return nil }
-	}
 	if config.WriteTimeout > 0 {
 		nfqueue.setWriteTimeout = func() error {
 			deadline := time.Now().Add(config.WriteTimeout)
@@ -135,13 +130,17 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 			return
 		}
 	}()
+	go func() {
+		// block until context is done
+		<-ctx.Done()
+		// Set the read deadline to a point in the past to interrupt
+		// possible blocking Receive() calls.
+		nfqueue.Con.SetReadDeadline(time.Now().Add(-1 * time.Second))
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			nfqueue.logger.Printf("Stop receiving nfqueue messages: %v\n", err)
 			return
-		}
-		if err := nfqueue.setReadTimeout(); err != nil {
-			nfqueue.logger.Printf("could not set read timeout: %v\n", err)
 		}
 		replys, err := nfqueue.Con.Receive()
 		if err != nil {

@@ -9,16 +9,12 @@ import (
 )
 
 func TestTimeout(t *testing.T) {
-
-	timeout := 10 * time.Millisecond
-
 	// Set configuration options for nfqueue
 	config := Config{
 		NfQueue:      123,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
 		Copymode:     NfQnlCopyPacket,
-		ReadTimeout:  timeout,
 	}
 
 	nfq, err := Open(&config)
@@ -27,8 +23,7 @@ func TestTimeout(t *testing.T) {
 	}
 	defer nfq.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 
 	fn := func(a Attribute) int {
 		id := *a.PacketID
@@ -44,7 +39,10 @@ func TestTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to register hook function: %v", err)
 	}
+	// cancel the context to remove the registered hook from the nfqueue.
+	cancel()
 
 	// Block till the context expires
 	<-ctx.Done()
+
 }
