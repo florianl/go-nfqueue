@@ -1,14 +1,32 @@
-//+build integration,linux
+//go:build integration && linux
+// +build integration,linux
 
 package nfqueue
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 	"time"
 )
 
+func startDummyPingTraffic(t *testing.T, ctx context.Context) {
+	t.Helper()
+
+	if err := exec.CommandContext(ctx, "ping6", "2606:4700:4700::1111").Start(); err != nil {
+		t.Fatalf("failed to start IPv6 ping: %v", err)
+	}
+	if err := exec.CommandContext(ctx, "ping", "1.1.1.1").Start(); err != nil {
+		t.Fatalf("failed to start IPv4 ping: %v", err)
+	}
+}
+
 func TestLinuxNfqueue(t *testing.T) {
+	pingCtx, pingCancel := context.WithCancel(context.Background())
+	defer pingCancel()
+
+	startDummyPingTraffic(t, pingCtx)
+
 	// Set configuration options for nfqueue
 	config := Config{
 		NfQueue:      100,
