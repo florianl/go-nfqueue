@@ -1,4 +1,5 @@
-//+build go1.12,integration,linux
+//go:build go1.12 && integration && linux
+// +build go1.12,integration,linux
 
 package nfqueue
 
