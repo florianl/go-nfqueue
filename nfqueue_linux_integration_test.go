@@ -98,5 +98,4 @@ func TestTimeout(t *testing.T) {
 
 	// Block till the context expires
 	<-ctx.Done()
-
 }

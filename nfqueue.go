@@ -151,10 +151,10 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		return err
 	}
 
+	nfqueue.wg.Add(1)
 	go func() {
-		nfqueue.wg.Add(1)
+		defer nfqueue.wg.Done()
 		nfqueue.socketCallback(ctx, fn, errfn, seq)
-		nfqueue.wg.Done()
 	}()
 
 	return nil
