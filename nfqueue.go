@@ -57,12 +57,16 @@ func (nfqueue *Nfqueue) SetVerdictModPacket(id uint32, verdict int, packet []byt
 func (nfqueue *Nfqueue) SetVerdictModPacketWithMark(id uint32, verdict, mark int, packet []byte) error {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(mark))
-	data, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: nfQaPayload,
-		Data: packet,
-	},
-		{Type: nfQaMark,
-			Data: buf}})
+	data, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{
+			Type: nfQaPayload,
+			Data: packet,
+		},
+		{
+			Type: nfQaMark,
+			Data: buf,
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -147,8 +151,11 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		return err
 	}
 
-	nfqueue.wg.Add(1)
-	go nfqueue.socketCallback(ctx, fn, errfn, seq)
+	go func() {
+		nfqueue.wg.Add(1)
+		nfqueue.socketCallback(ctx, fn, errfn, seq)
+		nfqueue.wg.Done()
+	}()
 
 	return nil
 }
@@ -309,11 +316,9 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 	}
 	_, sErr := nfqueue.Con.Send(req)
 	return sErr
-
 }
 
 func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn ErrorFunc, seq uint32) {
-	defer nfqueue.wg.Done()
 	defer func() {
 		// unbinding from queue
 		_, err := nfqueue.setConfig(uint8(unix.AF_UNSPEC), seq, nfqueue.queue, []netlink.Attribute{
