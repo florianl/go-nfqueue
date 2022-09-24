@@ -31,6 +31,7 @@ type Attribute struct {
 	CtInfo     *uint32
 	SkbInfo    *[]byte
 	Exp        *[]byte
+	SkbPrio    *uint32
 }
 
 // HookFunc is a function, that receives events from a Netlinkgroup
@@ -109,6 +110,7 @@ const (
 	nfQaSecCtx            /* security context string */
 	nfQaVLAN              /* nested attribute: packet vlan info */
 	nfQaL2HDR             /* full L2 header */
+	nfQaPriority          /* skb->priority */
 )
 
 const (
