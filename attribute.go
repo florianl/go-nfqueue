@@ -87,6 +87,9 @@ func extractAttribute(log *log.Logger, a *Attribute, data []byte) error {
 		case nfQaL2HDR:
 			l2hdr := ad.Bytes()
 			a.L2Hdr = &l2hdr
+		case nfQaPriority:
+			skbPrio := ad.Uint32()
+			a.SkbPrio = &skbPrio
 		default:
 			log.Printf("Unknown attribute Type: 0x%x\tData: %v\n", ad.Type(), ad.Bytes())
 		}
