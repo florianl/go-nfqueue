@@ -3,6 +3,7 @@ package nfqueue
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/florianl/go-nfqueue/internal/unix"
 
 	"github.com/mdlayher/netlink"
-	"github.com/pkg/errors"
 )
 
 // devNull satisfies io.Writer, in case *log.Logger is not provided
@@ -110,7 +110,7 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "Could not unbind existing handlers (if any)")
+		return fmt.Errorf("could not unbind existing handlers (if any): %w", err)
 	}
 
 	// binding to family
@@ -118,7 +118,7 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdPfBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "Could not bind to family %d", nfqueue.family)
+		return fmt.Errorf("could not bind to family %d: %w", nfqueue.family, err)
 	}
 
 	// binding to the requested queue
@@ -126,7 +126,7 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdBind, 0x0, 0x0, byte(nfqueue.family)}},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "Could not bind to requested queue %d", nfqueue.queue)
+		return fmt.Errorf("could not bind to requested queue %d: %w", nfqueue.queue, err)
 	}
 
 	// set copy mode and buffer size
@@ -198,7 +198,7 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	}
 	for _, msg := range reply {
 		if seq != 0 {
-			return 0, errors.Wrapf(ErrUnexpMsg, "Number of received messages: %d", len(reply))
+			return 0, fmt.Errorf("number of received messages: %d: %w", len(reply), ErrUnexpMsg)
 		}
 		seq = msg.Header.Sequence
 	}
