@@ -35,7 +35,7 @@ jobs:
         go test -v -tags integration -exec=sudo -count=1 ./...
     - name: staticcheck.io
       if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, '1.19')
-      uses: dominikh/staticcheck-action@v1.2.0
+      uses: dominikh/staticcheck-action@v1.3.0
       with:
         version: "2022.1.3"
         min-go-version: "1.17"
