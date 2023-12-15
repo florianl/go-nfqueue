@@ -41,6 +41,27 @@ func (nfqueue *Nfqueue) SetVerdictWithMark(id uint32, verdict, mark int) error {
 	return nfqueue.setVerdict(id, verdict, false, attributes)
 }
 
+// SetVerdictWithConnMark signals the kernel the next action and the connmark for a specified package id
+func (nfqueue *Nfqueue) SetVerdictWithConnMark(id uint32, verdict, mark int) error {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(mark))
+	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: ctaMark,
+		Data: buf,
+	}})
+	if err != nil {
+		return err
+	}
+	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: netlink.Nested | nfQaCt,
+		Data: ctAttrs,
+	}})
+	if err != nil {
+		return err
+	}
+	return nfqueue.setVerdict(id, verdict, false, attributes)
+}
+
 // SetVerdictModPacket signals the kernel the next action for an altered packet
 func (nfqueue *Nfqueue) SetVerdictModPacket(id uint32, verdict int, packet []byte) error {
 	data, err := netlink.MarshalAttributes([]netlink.Attribute{{
@@ -65,6 +86,33 @@ func (nfqueue *Nfqueue) SetVerdictModPacketWithMark(id uint32, verdict, mark int
 		{
 			Type: nfQaMark,
 			Data: buf,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nfqueue.setVerdict(id, verdict, false, data)
+}
+
+// SetVerdictModPacketWithConnMark signals the kernel the next action and connmark for an altered packet
+func (nfqueue *Nfqueue) SetVerdictModPacketWithConnMark(id uint32, verdict, mark int, packet []byte) error {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(mark))
+	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: ctaMark,
+		Data: buf,
+	}})
+	if err != nil {
+		return err
+	}
+	data, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{
+			Type: nfQaPayload,
+			Data: packet,
+		},
+		{
+			Type: netlink.Nested | nfQaCt,
+			Data: ctAttrs,
 		},
 	})
 	if err != nil {

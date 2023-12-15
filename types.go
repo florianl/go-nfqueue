@@ -163,3 +163,14 @@ const (
 	NfQeueue
 	NfRepeat
 )
+
+// conntrack attributes
+const (
+	ctaTupleOrig  = 1
+	ctaTupleReply = 2
+	ctaStatus     = 3
+	ctaTimeout    = 7
+	ctaMark       = 8
+	ctaProtoInfo  = 4
+	ctaLabels     = 22
+)
