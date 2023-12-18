@@ -163,3 +163,8 @@ const (
 	NfQeueue
 	NfRepeat
 )
+
+// conntrack attributes
+const (
+	ctaMark = 8
+)
