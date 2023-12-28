@@ -1,4 +1,5 @@
-//+build linux
+//go:build linux
+// +build linux
 
 package nfqueue_test
 
@@ -10,7 +11,7 @@ import (
 	nfqueue "github.com/florianl/go-nfqueue"
 )
 
-func ExampleNfqueue_Register() {
+func ExampleNfqueue_RegisterWithErrorFunc() {
 	// Send outgoing pings to nfqueue queue 100
 	// # sudo iptables -I OUTPUT -p icmp -j NFQUEUE --queue-num 100
 
@@ -42,7 +43,10 @@ func ExampleNfqueue_Register() {
 	}
 
 	// Register your function to listen on nflqueue queue 100
-	err = nf.Register(ctx, fn)
+	err = nf.RegisterWithErrorFunc(ctx, fn, func(e error) int {
+		fmt.Println(err)
+		return -1
+	})
 	if err != nil {
 		fmt.Println(err)
 		return
