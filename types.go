@@ -74,6 +74,9 @@ type Config struct {
 
 	// Interface to log internals.
 	Logger *log.Logger
+
+	// Number of routines for the task.
+	WorkerNum int
 }
 
 // Various errors
