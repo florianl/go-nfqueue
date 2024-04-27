@@ -131,6 +131,11 @@ func (nfqueue *Nfqueue) SetVerdictBatch(id uint32, verdict int) error {
 	return nfqueue.setVerdict(id, verdict, true, []byte{})
 }
 
+// SetOption allows to enable or disable netlink socket options.
+func (nfqueue *Nfqueue) SetOption(o netlink.ConnOption, enable bool) error {
+	return nfqueue.Con.SetOption(o, enable)
+}
+
 // Register your own function as callback for a netfilter queue.
 //
 // The registered callback will stop receiving data if an error
