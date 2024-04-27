@@ -9,6 +9,7 @@ import (
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue"
+	"github.com/mdlayher/netlink"
 )
 
 func ExampleNfqueue_RegisterWithErrorFunc() {
@@ -30,6 +31,13 @@ func ExampleNfqueue_RegisterWithErrorFunc() {
 		return
 	}
 	defer nf.Close()
+
+	// Avoid receiving ENOBUFS errors.
+	if err := nf.SetOption(netlink.NoENOBUFS, true); err != nil {
+		fmt.Printf("failed to set netlink option %v: %v\n",
+			netlink.NoENOBUFS, err)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
