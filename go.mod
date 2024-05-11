@@ -1,4 +1,4 @@
-module github.com/florianl/go-nfqueue
+module github.com/florianl/go-nfqueue/v2
 
 require (
 	github.com/mdlayher/netlink v1.7.2

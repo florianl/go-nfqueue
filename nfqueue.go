@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/florianl/go-nfqueue/internal/unix"
+	"github.com/florianl/go-nfqueue/v2/internal/unix"
 
 	"github.com/mdlayher/netlink"
 )
