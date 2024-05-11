@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -13,12 +12,13 @@ import (
 	"github.com/mdlayher/netlink"
 )
 
-// devNull satisfies io.Writer, in case *log.Logger is not provided
+var _ Logger = (*devNull)(nil)
+
+// devNull satisfies the Logger interface.
 type devNull struct{}
 
-func (devNull) Write(p []byte) (int, error) {
-	return 0, nil
-}
+func (dn *devNull) Debugf(format string, args ...interface{}) {}
+func (dn *devNull) Errorf(format string, args ...interface{}) {}
 
 // Close the connection to the netfilter queue subsystem
 func (nfqueue *Nfqueue) Close() error {
@@ -150,7 +150,7 @@ func (nfqueue *Nfqueue) Register(ctx context.Context, fn HookFunc) error {
 				return 0
 			}
 		}
-		nfqueue.logger.Printf("Could not receive message: %v\n", err)
+		nfqueue.logger.Errorf("Could not receive message: %v", err)
 		return 1
 	})
 }
@@ -259,7 +259,7 @@ func (nfqueue *Nfqueue) execute(req netlink.Message) (uint32, error) {
 	return seq, nil
 }
 
-func parseMsg(log *log.Logger, msg netlink.Message) (Attribute, error) {
+func parseMsg(log Logger, msg netlink.Message) (Attribute, error) {
 	a, err := extractAttributes(log, msg.Data)
 	if err != nil {
 		return a, err
@@ -272,7 +272,7 @@ type Nfqueue struct {
 	// Con is the pure representation of a netlink socket
 	Con *netlink.Conn
 
-	logger *log.Logger
+	logger Logger
 
 	wg sync.WaitGroup
 
@@ -284,6 +284,12 @@ type Nfqueue struct {
 	copymode     uint8
 
 	setWriteTimeout func() error
+}
+
+// Logger provides logging functionality.
+type Logger interface {
+	Debugf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
 }
 
 // Open a connection to the netfilter queue subsystem
@@ -309,7 +315,7 @@ func Open(config *Config) (*Nfqueue, error) {
 	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxQueueLen, config.MaxQueueLen)
 	if config.Logger == nil {
-		nfqueue.logger = log.New(new(devNull), "", 0)
+		nfqueue.logger = new(devNull)
 	} else {
 		nfqueue.logger = config.Logger
 	}
@@ -365,7 +371,7 @@ func (nfqueue *Nfqueue) setVerdict(id uint32, verdict int, batch bool, attribute
 	}
 
 	if err := nfqueue.setWriteTimeout(); err != nil {
-		nfqueue.logger.Printf("could not set write timeout: %v\n", err)
+		nfqueue.logger.Errorf("could not set write timeout: %v\n", err)
 	}
 	_, sErr := nfqueue.Con.Send(req)
 	return sErr
@@ -378,7 +384,7 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 			{Type: nfQaCfgCmd, Data: []byte{nfUlnlCfgCmdUnbind, 0x0, 0x0, byte(nfqueue.family)}},
 		})
 		if err != nil {
-			nfqueue.logger.Printf("Could not unbind from queue: %v\n", err)
+			nfqueue.logger.Errorf("Could not unbind from queue: %v", err)
 		}
 	}()
 
@@ -395,7 +401,7 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 
 	for {
 		if err := ctx.Err(); err != nil {
-			nfqueue.logger.Printf("Stop receiving nfqueue messages: %v\n", err)
+			nfqueue.logger.Errorf("Stop receiving nfqueue messages: %v", err)
 			return
 		}
 		replys, err := nfqueue.Con.Receive()
@@ -413,7 +419,7 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 			}
 			m, err := parseMsg(nfqueue.logger, msg)
 			if err != nil {
-				nfqueue.logger.Printf("Could not parse message: %v", err)
+				nfqueue.logger.Errorf("Could not parse message: %v", err)
 				continue
 			}
 			if ret := fn(m); ret != 0 {
