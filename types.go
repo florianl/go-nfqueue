@@ -2,7 +2,6 @@ package nfqueue
 
 import (
 	"errors"
-	"log"
 	"time"
 )
 
@@ -73,7 +72,7 @@ type Config struct {
 	WriteTimeout time.Duration
 
 	// Interface to log internals.
-	Logger *log.Logger
+	Logger Logger
 }
 
 // Various errors

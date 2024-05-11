@@ -3,7 +3,6 @@ package nfqueue
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"time"
 
 	"github.com/florianl/go-nfqueue/internal/unix"
@@ -11,7 +10,7 @@ import (
 	"github.com/mdlayher/netlink"
 )
 
-func extractAttribute(log *log.Logger, a *Attribute, data []byte) error {
+func extractAttribute(log Logger, a *Attribute, data []byte) error {
 	ad, err := netlink.NewAttributeDecoder(data)
 	if err != nil {
 		return err
@@ -91,7 +90,7 @@ func extractAttribute(log *log.Logger, a *Attribute, data []byte) error {
 			skbPrio := ad.Uint32()
 			a.SkbPrio = &skbPrio
 		default:
-			log.Printf("Unknown attribute Type: 0x%x\tData: %v\n", ad.Type(), ad.Bytes())
+			log.Errorf("Unknown attribute Type: 0x%x\tData: %v", ad.Type(), ad.Bytes())
 		}
 	}
 
@@ -105,7 +104,7 @@ func checkHeader(data []byte) int {
 	return 0
 }
 
-func extractAttributes(log *log.Logger, msg []byte) (Attribute, error) {
+func extractAttributes(log Logger, msg []byte) (Attribute, error) {
 	attrs := Attribute{}
 
 	offset := checkHeader(msg[:2])
