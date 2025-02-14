@@ -73,6 +73,9 @@ type Config struct {
 
 	// Interface to log internals.
 	Logger Logger
+
+	// Number of routines for the task.
+	WorkerNum int
 }
 
 // Various errors

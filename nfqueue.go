@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/florianl/go-nfqueue/v2/internal/unix"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/mdlayher/netlink"
 )
@@ -282,6 +283,7 @@ type Nfqueue struct {
 	queue        uint16
 	maxQueueLen  []byte // uint32
 	copymode     uint8
+	workerNum    int
 
 	setWriteTimeout func() error
 }
@@ -305,6 +307,12 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, err
 	}
 	nfqueue.Con = con
+
+	nfqueue.workerNum = config.WorkerNum
+	if nfqueue.workerNum == 0 {
+		nfqueue.workerNum = 1
+	}
+
 	// default size of copied packages to userspace
 	nfqueue.maxPacketLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxPacketLen, config.MaxPacketLen)
@@ -399,32 +407,40 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 		nfqueue.Con.SetReadDeadline(time.Now().Add(-1 * time.Second))
 	}()
 
-	for {
-		if err := ctx.Err(); err != nil {
-			nfqueue.logger.Errorf("Stop receiving nfqueue messages: %v", err)
-			return
-		}
-		replys, err := nfqueue.Con.Receive()
-		if err != nil {
-			if ret := errfn(err); ret != 0 {
-				return
+	wg, wgCtx := errgroup.WithContext(ctx)
+
+	for i := 0; i < nfqueue.workerNum; i++ {
+		wg.Go(func() error {
+			for {
+				if err := wgCtx.Err(); err != nil {
+					nfqueue.logger.Errorf("Stop receiving nfqueue messages: %v", err)
+					return err
+				}
+				replys, err := nfqueue.Con.Receive()
+				if err != nil {
+					if ret := errfn(err); ret != 0 {
+						return err
+					}
+					continue
+				}
+				for _, msg := range replys {
+					if msg.Header.Type == netlink.Done {
+						// this is the last message of a batch
+						// continue to receive messages
+						break
+					}
+					m, err := parseMsg(nfqueue.logger, msg)
+					if err != nil {
+						nfqueue.logger.Errorf("Could not parse message: %v", err)
+						continue
+					}
+					if ret := fn(m); ret != 0 {
+						return err
+					}
+				}
 			}
-			continue
-		}
-		for _, msg := range replys {
-			if msg.Header.Type == netlink.Done {
-				// this is the last message of a batch
-				// continue to receive messages
-				break
-			}
-			m, err := parseMsg(nfqueue.logger, msg)
-			if err != nil {
-				nfqueue.logger.Errorf("Could not parse message: %v", err)
-				continue
-			}
-			if ret := fn(m); ret != 0 {
-				return
-			}
-		}
+		})
 	}
+
+	wg.Wait()
 }
