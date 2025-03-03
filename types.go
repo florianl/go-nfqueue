@@ -76,6 +76,9 @@ type Config struct {
 
 	// Number of routines for the task.
 	WorkerNum int
+
+	// Size of the buffer for reading from the socket.
+	ReceiveBuffer int
 }
 
 // Various errors

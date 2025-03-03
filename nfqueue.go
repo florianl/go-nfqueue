@@ -21,6 +21,14 @@ type devNull struct{}
 func (dn *devNull) Debugf(format string, args ...interface{}) {}
 func (dn *devNull) Errorf(format string, args ...interface{}) {}
 
+// Definition taken from Linux kernel source.
+// #define NLMSG_ALIGNTO   4U
+const lenAlignTo = 4
+
+func lenAlign(len int) int {
+	return (len + lenAlignTo - 1) & ^(lenAlignTo - 1)
+}
+
 // Close the connection to the netfilter queue subsystem
 func (nfqueue *Nfqueue) Close() error {
 	err := nfqueue.Con.Close()
@@ -277,13 +285,14 @@ type Nfqueue struct {
 
 	wg sync.WaitGroup
 
-	flags        []byte // uint32
-	maxPacketLen []byte // uint32
-	family       uint8
-	queue        uint16
-	maxQueueLen  []byte // uint32
-	copymode     uint8
-	workerNum    int
+	flags         []byte // uint32
+	maxPacketLen  []byte // uint32
+	family        uint8
+	queue         uint16
+	maxQueueLen   []byte // uint32
+	copymode      uint8
+	workerNum     int
+	receiveBuffer int
 
 	setWriteTimeout func() error
 }
@@ -313,6 +322,7 @@ func Open(config *Config) (*Nfqueue, error) {
 		nfqueue.workerNum = 1
 	}
 
+	nfqueue.receiveBuffer = max(lenAlign(config.ReceiveBuffer), 0)
 	// default size of copied packages to userspace
 	nfqueue.maxPacketLen = []byte{0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(nfqueue.maxPacketLen, config.MaxPacketLen)
@@ -409,21 +419,22 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 
 	wg, wgCtx := errgroup.WithContext(ctx)
 
-	for i := 0; i < nfqueue.workerNum; i++ {
+	for range nfqueue.workerNum {
 		wg.Go(func() error {
+			buf := make([]byte, nfqueue.receiveBuffer)
 			for {
 				if err := wgCtx.Err(); err != nil {
 					nfqueue.logger.Errorf("Stop receiving nfqueue messages: %v", err)
 					return err
 				}
-				replys, err := nfqueue.Con.Receive()
+				messages, err := nfqueue.receive(buf)
 				if err != nil {
 					if ret := errfn(err); ret != 0 {
 						return err
 					}
 					continue
 				}
-				for _, msg := range replys {
+				for _, msg := range messages {
 					if msg.Header.Type == netlink.Done {
 						// this is the last message of a batch
 						// continue to receive messages
@@ -443,4 +454,16 @@ func (nfqueue *Nfqueue) socketCallback(ctx context.Context, fn HookFunc, errfn E
 	}
 
 	wg.Wait()
+}
+
+func (nfqueue *Nfqueue) receive(buf []byte) ([]netlink.Message, error) {
+	if len(buf) > 0 {
+		for j := range buf {
+			buf[j] = 0
+		}
+
+		return nfqueue.Con.ReceiveToBuf(buf)
+	}
+
+	return nfqueue.Con.Receive()
 }
