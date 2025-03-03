@@ -5,9 +5,8 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/florianl/go-nfqueue/v2/internal/unix"
-
-	"github.com/mdlayher/netlink"
+	"github.com/yanet-platform/go-nfqueue/v2/internal/unix"
+	"github.com/yanet-platform/netlink"
 )
 
 func extractAttribute(log Logger, a *Attribute, data []byte) error {
