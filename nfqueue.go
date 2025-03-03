@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/florianl/go-nfqueue/v2/internal/unix"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/mdlayher/netlink"
+	"github.com/yanet-platform/go-nfqueue/v2/internal/unix"
+	"github.com/yanet-platform/netlink"
 )
 
 var _ Logger = (*devNull)(nil)
