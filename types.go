@@ -164,6 +164,8 @@ const (
 )
 
 // conntrack attributes
+// include/uapi/linux/netfilter/nfnetlink_conntrack.h
 const (
-	ctaMark = 8
+	ctaMark   = 8
+	ctaLabels = 22 // CTA_LABELS
 )

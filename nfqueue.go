@@ -62,6 +62,28 @@ func (nfqueue *Nfqueue) SetVerdictWithConnMark(id uint32, verdict, mark int) err
 	return nfqueue.setVerdict(id, verdict, false, attributes)
 }
 
+// SetVerdictWithLabel signals the kernel the next action and the label for a specified package id
+func (nfqueue *Nfqueue) SetVerdictWithLabel(id uint32, verdict int, label []byte) error {
+	if len(label) != 16 {
+		return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
+	}
+	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: ctaLabels,
+		Data: label,
+	}})
+	if err != nil {
+		return err
+	}
+	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: netlink.Nested | nfQaCt,
+		Data: ctAttrs,
+	}})
+	if err != nil {
+		return err
+	}
+	return nfqueue.setVerdict(id, verdict, false, attributes)
+}
+
 // SetVerdictModPacket signals the kernel the next action for an altered packet
 func (nfqueue *Nfqueue) SetVerdictModPacket(id uint32, verdict int, packet []byte) error {
 	data, err := netlink.MarshalAttributes([]netlink.Attribute{{
@@ -101,6 +123,34 @@ func (nfqueue *Nfqueue) SetVerdictModPacketWithConnMark(id uint32, verdict, mark
 	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
 		Type: ctaMark,
 		Data: buf,
+	}})
+	if err != nil {
+		return err
+	}
+	data, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{
+			Type: nfQaPayload,
+			Data: packet,
+		},
+		{
+			Type: netlink.Nested | nfQaCt,
+			Data: ctAttrs,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nfqueue.setVerdict(id, verdict, false, data)
+}
+
+// SetVerdictModPacketWithLabel signals the kernel the next action and label for an altered packet
+func (nfqueue *Nfqueue) SetVerdictModPacketWithLabel(id uint32, verdict int, label []byte, packet []byte) error {
+	if len(label) != 16 {
+		return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
+	}
+	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
+		Type: ctaLabels,
+		Data: label,
 	}})
 	if err != nil {
 		return err
