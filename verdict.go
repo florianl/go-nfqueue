@@ -1,0 +1,85 @@
+package nfqueue
+
+import (
+	"encoding/binary"
+	"fmt"
+
+	"github.com/mdlayher/netlink"
+)
+
+// VerdictOption configures additional verdict parameters like mark, label, or packet payload.
+type VerdictOption func(*verdictOptions) error
+
+type verdictOptions struct {
+	attrs []netlink.Attribute
+}
+
+// WithMark sets the packet mark.
+func WithMark(mark uint32) VerdictOption {
+	return func(vo *verdictOptions) error {
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(mark))
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: nfQaMark,
+			Data: buf,
+		})
+		return nil
+	}
+}
+
+// WithConnMark sets the packet connmark.
+func WithConnMark(mark uint32) VerdictOption {
+	return func(vo *verdictOptions) error {
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(mark))
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: ctaMark,
+			Data: buf,
+		})
+		return nil
+	}
+}
+
+// WithLabel sets the packet label.
+func WithLabel(label []byte) VerdictOption {
+	return func(vo *verdictOptions) error {
+		if len(label) != 16 {
+			return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
+		}
+
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: ctaLabels,
+			Data: label,
+		})
+		return nil
+	}
+}
+
+// WithAlteredPacket sets the altered packet payload.
+func WithAlteredPacket(packet []byte) VerdictOption {
+	return func(vo *verdictOptions) error {
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: nfQaPayload,
+			Data: packet,
+		})
+		return nil
+	}
+}
+
+// SetVerdictWithOption signals the kernel the next action for a specified packet id
+// and applies any number of verdict options like WithMark, WithLabel, WithPacket.
+func (nfqueue *Nfqueue) SetVerdictWithOption(id uint32, verdict int, options ...VerdictOption) error {
+	verdictAttrs := []netlink.Attribute{}
+	for _, opt := range options {
+		if err := opt(&verdictOptions{attrs: verdictAttrs}); err != nil {
+			return err
+		}
+	}
+
+	data, err := netlink.MarshalAttributes(verdictAttrs)
+	if err != nil {
+		return err
+	}
+
+	return nfqueue.setVerdict(id, verdict, false, data)
+}

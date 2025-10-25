@@ -28,147 +28,52 @@ func (nfqueue *Nfqueue) Close() error {
 }
 
 // SetVerdictWithMark signals the kernel the next action and the mark for a specified package id
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictWithMark(id uint32, verdict, mark int) error {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(mark))
-	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: nfQaMark,
-		Data: buf,
-	}})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, attributes)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithMark(uint32(mark)))
 }
 
 // SetVerdictWithConnMark signals the kernel the next action and the connmark for a specified package id
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictWithConnMark(id uint32, verdict, mark int) error {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(mark))
-	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: ctaMark,
-		Data: buf,
-	}})
-	if err != nil {
-		return err
-	}
-	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: netlink.Nested | nfQaCt,
-		Data: ctAttrs,
-	}})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, attributes)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithConnMark(uint32(mark)))
 }
 
 // SetVerdictWithLabel signals the kernel the next action and the label for a specified package id
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictWithLabel(id uint32, verdict int, label []byte) error {
-	if len(label) != 16 {
-		return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
-	}
-	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: ctaLabels,
-		Data: label,
-	}})
-	if err != nil {
-		return err
-	}
-	attributes, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: netlink.Nested | nfQaCt,
-		Data: ctAttrs,
-	}})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, attributes)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithLabel(label))
 }
 
 // SetVerdictModPacket signals the kernel the next action for an altered packet
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacket(id uint32, verdict int, packet []byte) error {
-	data, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: nfQaPayload,
-		Data: packet,
-	}})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, data)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPacket(packet))
 }
 
 // SetVerdictModPacketWithMark signals the kernel the next action and mark for an altered packet
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithMark(id uint32, verdict, mark int, packet []byte) error {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(mark))
-	data, err := netlink.MarshalAttributes([]netlink.Attribute{
-		{
-			Type: nfQaPayload,
-			Data: packet,
-		},
-		{
-			Type: nfQaMark,
-			Data: buf,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, data)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithMark(uint32(mark)), WithAlteredPacket(packet))
 }
 
 // SetVerdictModPacketWithConnMark signals the kernel the next action and connmark for an altered packet
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithConnMark(id uint32, verdict, mark int, packet []byte) error {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(mark))
-	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: ctaMark,
-		Data: buf,
-	}})
-	if err != nil {
-		return err
-	}
-	data, err := netlink.MarshalAttributes([]netlink.Attribute{
-		{
-			Type: nfQaPayload,
-			Data: packet,
-		},
-		{
-			Type: netlink.Nested | nfQaCt,
-			Data: ctAttrs,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, data)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithConnMark(uint32(mark)), WithAlteredPacket(packet))
 }
 
 // SetVerdictModPacketWithLabel signals the kernel the next action and label for an altered packet
+//
+// Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithLabel(id uint32, verdict int, label []byte, packet []byte) error {
-	if len(label) != 16 {
-		return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
-	}
-	ctAttrs, err := netlink.MarshalAttributes([]netlink.Attribute{{
-		Type: ctaLabels,
-		Data: label,
-	}})
-	if err != nil {
-		return err
-	}
-	data, err := netlink.MarshalAttributes([]netlink.Attribute{
-		{
-			Type: nfQaPayload,
-			Data: packet,
-		},
-		{
-			Type: netlink.Nested | nfQaCt,
-			Data: ctAttrs,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	return nfqueue.setVerdict(id, verdict, false, data)
+	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPacket(packet), WithLabel(label))
 }
 
 // SetVerdict signals the kernel the next action for a specified package id
