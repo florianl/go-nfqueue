@@ -11,14 +11,15 @@ import (
 type VerdictOption func(*verdictOptions) error
 
 type verdictOptions struct {
-	attrs []netlink.Attribute
+	attrs   []netlink.Attribute
+	ctAttrs []netlink.Attribute
 }
 
 // WithMark sets the packet mark.
 func WithMark(mark uint32) VerdictOption {
 	return func(vo *verdictOptions) error {
 		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, uint32(mark))
+		binary.BigEndian.PutUint32(buf, mark)
 		vo.attrs = append(vo.attrs, netlink.Attribute{
 			Type: nfQaMark,
 			Data: buf,
@@ -31,8 +32,9 @@ func WithMark(mark uint32) VerdictOption {
 func WithConnMark(mark uint32) VerdictOption {
 	return func(vo *verdictOptions) error {
 		buf := make([]byte, 4)
-		binary.BigEndian.PutUint32(buf, uint32(mark))
-		vo.attrs = append(vo.attrs, netlink.Attribute{
+		binary.BigEndian.PutUint32(buf, mark)
+		// collect conntrack attributes; will be nested under nfQaCt later
+		vo.ctAttrs = append(vo.ctAttrs, netlink.Attribute{
 			Type: ctaMark,
 			Data: buf,
 		})
@@ -46,8 +48,8 @@ func WithLabel(label []byte) VerdictOption {
 		if len(label) != 16 {
 			return fmt.Errorf("conntrack CTA_LABELS must be 16 bytes, got %d", len(label))
 		}
-
-		vo.attrs = append(vo.attrs, netlink.Attribute{
+		// collect conntrack attributes; will be nested under nfQaCt later
+		vo.ctAttrs = append(vo.ctAttrs, netlink.Attribute{
 			Type: ctaLabels,
 			Data: label,
 		})
@@ -69,14 +71,26 @@ func WithAlteredPacket(packet []byte) VerdictOption {
 // SetVerdictWithOption signals the kernel the next action for a specified packet id
 // and applies any number of verdict options like WithMark, WithLabel, WithPacket.
 func (nfqueue *Nfqueue) SetVerdictWithOption(id uint32, verdict int, options ...VerdictOption) error {
-	verdictAttrs := []netlink.Attribute{}
+	vo := &verdictOptions{}
 	for _, opt := range options {
-		if err := opt(&verdictOptions{attrs: verdictAttrs}); err != nil {
+		if err := opt(vo); err != nil {
 			return err
 		}
 	}
 
-	data, err := netlink.MarshalAttributes(verdictAttrs)
+	// If conntrack attributes were provided, nest them under nfQaCt
+	if len(vo.ctAttrs) > 0 {
+		ctData, err := netlink.MarshalAttributes(vo.ctAttrs)
+		if err != nil {
+			return err
+		}
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: netlink.Nested | nfQaCt,
+			Data: ctData,
+		})
+	}
+
+	data, err := netlink.MarshalAttributes(vo.attrs)
 	if err != nil {
 		return err
 	}
