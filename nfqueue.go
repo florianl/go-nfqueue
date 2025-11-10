@@ -52,28 +52,28 @@ func (nfqueue *Nfqueue) SetVerdictWithLabel(id uint32, verdict int, label []byte
 //
 // Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacket(id uint32, verdict int, packet []byte) error {
-	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPacket(packet))
+	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPayload(packet))
 }
 
 // SetVerdictModPacketWithMark signals the kernel the next action and mark for an altered packet
 //
 // Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithMark(id uint32, verdict, mark int, packet []byte) error {
-	return nfqueue.SetVerdictWithOption(id, verdict, WithMark(uint32(mark)), WithAlteredPacket(packet))
+	return nfqueue.SetVerdictWithOption(id, verdict, WithMark(uint32(mark)), WithAlteredPayload(packet))
 }
 
 // SetVerdictModPacketWithConnMark signals the kernel the next action and connmark for an altered packet
 //
 // Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithConnMark(id uint32, verdict, mark int, packet []byte) error {
-	return nfqueue.SetVerdictWithOption(id, verdict, WithConnMark(uint32(mark)), WithAlteredPacket(packet))
+	return nfqueue.SetVerdictWithOption(id, verdict, WithConnMark(uint32(mark)), WithAlteredPayload(packet))
 }
 
 // SetVerdictModPacketWithLabel signals the kernel the next action and label for an altered packet
 //
 // Deprecated: Use SetVerdictWithOption() instead.
 func (nfqueue *Nfqueue) SetVerdictModPacketWithLabel(id uint32, verdict int, label []byte, packet []byte) error {
-	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPacket(packet), WithLabel(label))
+	return nfqueue.SetVerdictWithOption(id, verdict, WithAlteredPayload(packet), WithLabel(label))
 }
 
 // SetVerdict signals the kernel the next action for a specified package id

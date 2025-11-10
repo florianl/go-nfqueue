@@ -58,11 +58,35 @@ func WithLabel(label []byte) VerdictOption {
 }
 
 // WithAlteredPacket sets the altered packet payload.
+//
+// Deprecated: Use WithAlteredPayload(payload []byte) instead.
 func WithAlteredPacket(packet []byte) VerdictOption {
 	return func(vo *verdictOptions) error {
 		vo.attrs = append(vo.attrs, netlink.Attribute{
 			Type: nfQaPayload,
 			Data: packet,
+		})
+		return nil
+	}
+}
+
+// WithAlteredPayload sets the altered packet payload.
+func WithAlteredPayload(payload []byte) VerdictOption {
+	return func(vo *verdictOptions) error {
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: nfQaPayload,
+			Data: payload,
+		})
+		return nil
+	}
+}
+
+// WithAlteredPacketHeader sets the altered packet header.
+func WithAlteredPacketHeader(header []byte) VerdictOption {
+	return func(vo *verdictOptions) error {
+		vo.attrs = append(vo.attrs, netlink.Attribute{
+			Type: nfQaPacketHdr,
+			Data: header,
 		})
 		return nil
 	}
