@@ -267,8 +267,13 @@ func Open(config *Config) (*Nfqueue, error) {
 	binary.BigEndian.PutUint32(nfqueue.flags, config.Flags)
 	nfqueue.queue = config.NfQueue
 	nfqueue.family = config.AfFamily
+
 	nfqueue.maxQueueLen = []byte{0x00, 0x00, 0x00, 0x00}
+	if config.MaxQueueLen == 0 {
+		config.MaxQueueLen = kernelDefaultMaxQueueLen
+	}
 	binary.BigEndian.PutUint32(nfqueue.maxQueueLen, config.MaxQueueLen)
+
 	if config.Logger == nil {
 		nfqueue.logger = new(devNull)
 	} else {

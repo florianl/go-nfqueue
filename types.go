@@ -50,6 +50,7 @@ type Config struct {
 	// Queue this Nfqueue socket will be assigned to
 	NfQueue uint16
 	// Maximum number of packages within the Nfqueue.
+	// If not set or set to 0, the kernel default (1024) will be used.
 	MaxQueueLen uint32
 
 	// Only used in combination with NfQnlCopyPacket.
@@ -169,3 +170,6 @@ const (
 	ctaMark   = 8
 	ctaLabels = 22 // CTA_LABELS
 )
+
+// kernelDefaultMaxQueueLen is the default maximum queue length used by the kernel
+const kernelDefaultMaxQueueLen = 1024
