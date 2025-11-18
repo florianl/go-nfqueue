@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.18.x, 1.22.x, 1.23.x, 1.24.x]
+        go-version: [1.23.x, 1.24.x, 1.25.x]
         platform: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
@@ -27,14 +27,14 @@ jobs:
     - name: Test with -race
       run: go test -race -count=1 ./...
     - name: Integration test
-      if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, '1.24')
+      if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, '1.25')
       run: |
         sudo modprobe nfnetlink_queue
         sudo ip6tables -I OUTPUT -p ipv6-icmp -j NFQUEUE --queue-num 100
         sudo iptables -I OUTPUT -p icmp -j NFQUEUE --queue-num 100
         go test -v -tags integration -exec=sudo -count=1 ./...
     - name: staticcheck.io
-      if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, '1.24')
+      if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, '1.25')
       uses: dominikh/staticcheck-action@v1.4.0
       with:
         version: "2025.1"
