@@ -3,6 +3,7 @@ package nfqueue
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"github.com/florianl/go-nfqueue/v2/internal/unix"
@@ -19,22 +20,30 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 	for ad.Next() {
 		switch ad.Type() {
 		case nfQaPacketHdr:
-			packetID := binary.BigEndian.Uint32(ad.Bytes()[:4])
+			data := ad.Bytes()
+			if len(data) < 7 {
+				return fmt.Errorf("nfQaPacketHdr: insufficient data length: %d", len(data))
+			}
+			packetID := binary.BigEndian.Uint32(data[:4])
 			a.PacketID = &packetID
-			hwProto := binary.BigEndian.Uint16(ad.Bytes()[4:6])
+			hwProto := binary.BigEndian.Uint16(data[4:6])
 			a.HwProtocol = &hwProto
-			hook := uint8(ad.Bytes()[6])
+			hook := uint8(data[6])
 			a.Hook = &hook
 		case nfQaMark:
 			mark := ad.Uint32()
 			a.Mark = &mark
 		case nfQaTimestamp:
+			data := ad.Bytes()
+			if len(data) < 16 {
+				return fmt.Errorf("nfQaTimestamp: insufficient data length: %d", len(data))
+			}
 			var sec, usec int64
-			r := bytes.NewReader(ad.Bytes()[:8])
+			r := bytes.NewReader(data[:8])
 			if err := binary.Read(r, binary.BigEndian, &sec); err != nil {
 				return err
 			}
-			r = bytes.NewReader(ad.Bytes()[8:])
+			r = bytes.NewReader(data[8:])
 			if err := binary.Read(r, binary.BigEndian, &usec); err != nil {
 				return err
 			}
@@ -53,8 +62,15 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 			physOutDev := ad.Uint32()
 			a.PhysOutDev = &physOutDev
 		case nfQaHwAddr:
-			hwAddrLen := binary.BigEndian.Uint16(ad.Bytes()[:2])
-			hwAddr := (ad.Bytes())[4 : 4+hwAddrLen]
+			data := ad.Bytes()
+			if len(data) < 4 {
+				return fmt.Errorf("nfQaHwAddr: insufficient data length: %d", len(data))
+			}
+			hwAddrLen := binary.BigEndian.Uint16(data[:2])
+			if len(data) < int(4+hwAddrLen) {
+				return fmt.Errorf("nfQaHwAddr: insufficient data for hwAddrLen %d: got %d", hwAddrLen, len(data))
+			}
+			hwAddr := data[4 : 4+hwAddrLen]
 			a.HwAddr = &hwAddr
 		case nfQaPayload:
 			payload := ad.Bytes()
@@ -98,6 +114,9 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 }
 
 func checkHeader(data []byte) int {
+	if len(data) < 2 {
+		return 0
+	}
 	if (data[0] == unix.AF_INET || data[0] == unix.AF_INET6) && data[1] == unix.NFNETLINK_V0 {
 		return 4
 	}
@@ -107,7 +126,14 @@ func checkHeader(data []byte) int {
 func extractAttributes(log Logger, msg []byte) (Attribute, error) {
 	attrs := Attribute{}
 
-	offset := checkHeader(msg[:2])
+	if len(msg) == 0 {
+		return attrs, nil
+	}
+
+	offset := checkHeader(msg)
+	if offset >= len(msg) {
+		offset = 0
+	}
 	if err := extractAttribute(log, &attrs, msg[offset:]); err != nil {
 		return attrs, err
 	}
