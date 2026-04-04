@@ -113,14 +113,14 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 	return ad.Err()
 }
 
-func checkHeader(data []byte) int {
+func checkHeader(data []byte) (int, error) {
 	if len(data) < 2 {
-		return 0
+		return 0, fmt.Errorf("too less data for header")
 	}
 	if (data[0] == unix.AF_INET || data[0] == unix.AF_INET6) && data[1] == unix.NFNETLINK_V0 {
-		return 4
+		return 4, nil
 	}
-	return 0
+	return 0, fmt.Errorf("invalid header %#v", data[:2])
 }
 
 func extractAttributes(log Logger, msg []byte) (Attribute, error) {
@@ -130,9 +130,12 @@ func extractAttributes(log Logger, msg []byte) (Attribute, error) {
 		return attrs, nil
 	}
 
-	offset := checkHeader(msg)
+	offset, err := checkHeader(msg)
+	if err != nil {
+		return attrs, err
+	}
 	if offset >= len(msg) {
-		offset = 0
+		return attrs, fmt.Errorf("too less data for attribute")
 	}
 	if err := extractAttribute(log, &attrs, msg[offset:]); err != nil {
 		return attrs, err
