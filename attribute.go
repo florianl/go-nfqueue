@@ -70,13 +70,13 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 			if len(data) < int(4+hwAddrLen) {
 				return fmt.Errorf("nfQaHwAddr: insufficient data for hwAddrLen %d: got %d", hwAddrLen, len(data))
 			}
-			hwAddr := bytes.Clone(data[4 : 4+hwAddrLen])
+			hwAddr := clone(data[4 : 4+hwAddrLen])
 			a.HwAddr = &hwAddr
 		case nfQaPayload:
-			payload := bytes.Clone(ad.Bytes())
+			payload := clone(ad.Bytes())
 			a.Payload = &payload
 		case nfQaCt:
-			ct := bytes.Clone(ad.Bytes())
+			ct := clone(ad.Bytes())
 			a.Ct = &ct
 		case nfQaCtInfo:
 			ctInfo := ad.Uint32()
@@ -85,10 +85,10 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 			capLen := ad.Uint32()
 			a.CapLen = &capLen
 		case nfQaSkbInfo:
-			skbInfo := bytes.Clone(ad.Bytes())
+			skbInfo := clone(ad.Bytes())
 			a.SkbInfo = &skbInfo
 		case nfQaExp:
-			exp := bytes.Clone(ad.Bytes())
+			exp := clone(ad.Bytes())
 			a.Exp = &exp
 		case nfQaUID:
 			uid := ad.Uint32()
@@ -100,7 +100,7 @@ func extractAttribute(log Logger, a *Attribute, data []byte) error {
 			secCtx := ad.String()
 			a.SecCtx = &secCtx
 		case nfQaL2HDR:
-			l2hdr := bytes.Clone(ad.Bytes())
+			l2hdr := clone(ad.Bytes())
 			a.L2Hdr = &l2hdr
 		case nfQaPriority:
 			skbPrio := ad.Uint32()
