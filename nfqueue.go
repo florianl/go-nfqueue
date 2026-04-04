@@ -23,6 +23,9 @@ func (dn *devNull) Errorf(format string, args ...interface{}) {}
 // Close the connection to the netfilter queue subsystem
 func (nfqueue *Nfqueue) Close() error {
 	err := nfqueue.Con.Close()
+	if nfqueue.ctxCancel != nil {
+		nfqueue.ctxCancel()
+	}
 	nfqueue.wg.Wait()
 	return err
 }
@@ -159,10 +162,13 @@ func (nfqueue *Nfqueue) RegisterWithErrorFunc(ctx context.Context, fn HookFunc, 
 		return err
 	}
 
+	internalCtx, cancel := context.WithCancel(ctx)
+	nfqueue.ctxCancel = cancel
+
 	nfqueue.wg.Add(1)
 	go func() {
 		defer nfqueue.wg.Done()
-		nfqueue.socketCallback(ctx, fn, errfn, seq)
+		nfqueue.socketCallback(internalCtx, fn, errfn, seq)
 	}()
 
 	return nil
@@ -229,7 +235,8 @@ type Nfqueue struct {
 
 	logger Logger
 
-	wg sync.WaitGroup
+	wg        sync.WaitGroup
+	ctxCancel context.CancelFunc
 
 	flags        []byte // uint32
 	maxPacketLen []byte // uint32
