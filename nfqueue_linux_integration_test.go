@@ -5,6 +5,7 @@ package nfqueue
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os/exec"
 	"runtime"
@@ -13,6 +14,10 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jsimonetti/rtnetlink"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sys/unix"
 )
 
 func startDummyPingTraffic(t *testing.T, ctx context.Context) {
@@ -105,19 +110,44 @@ func TestTimeout(t *testing.T) {
 	<-ctx.Done()
 }
 
+// TODO: check if lo is already up.
+// TODO: if lo is not up yet, turn it down after the test again.
+func changeLoIFaceState(t *testing.T) error {
+	t.Helper()
+	loIFace, err := net.InterfaceByName("lo")
+	if err != nil {
+		return err
+	}
+	con, err := rtnetlink.Dial(nil)
+	if err != nil {
+		return err
+	}
+
+	return con.Link.Set(&rtnetlink.LinkMessage{
+		Family: unix.AF_UNSPEC,
+		Index:  uint32(loIFace.Index),
+		Flags:  unix.IFF_UP,
+		Change: unix.IFF_UP,
+	})
+}
+
 func TestNfqueuePacketPath(t *testing.T) {
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		t.Fatalf("failed to unshare network namespace: %v", err)
-	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	var g errgroup.Group
+	g.Go(func() error {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 
-	// Bring up the loopback interface so that packets can be sent through the nfqueue path.
-	if out, err := exec.Command("ip", "link", "set", "lo", "up").CombinedOutput(); err != nil {
-		t.Fatalf("failed to bring lo up: %v: %s", err, out)
-	}
+		if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+			return fmt.Errorf("failed to unshare network namespace: %v", err)
+		}
 
-	nftRules := strings.NewReader(`
+		// Bring up the loopback interface so that packets can be sent through the nfqueue path.
+		if err := changeLoIFaceState(t); err != nil {
+			return err
+		}
+
+		// Prepare nft
+		nftRules := strings.NewReader(`
 table inet test-nfqueue {
 	chain output {
 		type filter hook output priority 0; policy accept;
@@ -125,69 +155,76 @@ table inet test-nfqueue {
 	}
 }
 `)
-	cmd := exec.Command("nft", "-f", "-")
-	cmd.Stdin = nftRules
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("failed to set up nftables: %v: %s", err, out)
-	}
-
-	nfq, err := Open(&Config{
-		NfQueue:      200,
-		MaxPacketLen: 0xFFFF,
-		MaxQueueLen:  0xFF,
-		Copymode:     NfQnlCopyPacket,
-		WriteTimeout: 100 * time.Millisecond,
-	})
-	if err != nil {
-		t.Fatalf("failed to open nfqueue: %v", err)
-	}
-	defer nfq.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	var callbackFired atomic.Bool
-	err = nfq.RegisterWithErrorFunc(ctx, func(a Attribute) int {
-		callbackFired.Store(true)
-		nfq.SetVerdict(*a.PacketID, NfAccept)
-		return 0
-	}, func(err error) int {
-		// Timeouts return an error "netlink receive: use of closed file".
-		// This is a workaround to avoid treating timeouts as test failures.
-		if ctx.Err() == nil {
-			t.Errorf("nfqueue error: %v", err)
+		cmd := exec.Command("nft", "-f", "-")
+		cmd.Stdin = nftRules
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to set up nftables: %v: %s", err, out)
 		}
-		return 0
+
+		// Prepare nfq
+		nfq, err := Open(&Config{
+			NfQueue:      200,
+			MaxPacketLen: 0xFFFF,
+			MaxQueueLen:  0xFF,
+			Copymode:     NfQnlCopyPacket,
+			WriteTimeout: 100 * time.Millisecond,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to open nfqueue: %v", err)
+		}
+		defer nfq.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		var callbackFired atomic.Bool
+		err = nfq.RegisterWithErrorFunc(ctx, func(a Attribute) int {
+			callbackFired.Store(true)
+			nfq.SetVerdict(*a.PacketID, NfAccept)
+			return 0
+		}, func(err error) int {
+			// Timeouts return an error "netlink receive: use of closed file".
+			// This is a workaround to avoid treating timeouts as test failures.
+			if ctx.Err() == nil {
+				t.Errorf("nfqueue error: %v", err)
+			}
+			return 0
+		})
+		if err != nil {
+			return fmt.Errorf("failed to register: %v", err)
+		}
+
+		// Listen on a UDP port to receive the packet that will be sent through the nfqueue path
+		listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			return fmt.Errorf("failed to listen: %v", err)
+		}
+		defer listener.Close()
+		listener.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+		// Send a UDP packet to trigger the nfqueue callback
+		conn, err := net.Dial("udp", listener.LocalAddr().String())
+		if err != nil {
+			return fmt.Errorf("failed to dial: %v", err)
+		}
+		conn.Write([]byte("test-packet"))
+		conn.Close()
+
+		buf := make([]byte, 256)
+		n, _, err := listener.ReadFromUDP(buf)
+		if err != nil {
+			return fmt.Errorf("packet not delivered (nfqueue receive/verdict broken): %v", err)
+		}
+		if got := string(buf[:n]); got != "test-packet" {
+			return fmt.Errorf("received %q, want %q", got, "test-packet")
+		}
+		if !callbackFired.Load() {
+			return fmt.Errorf("nfqueue callback was never invoked")
+		}
+		return nil
 	})
-	if err != nil {
-		t.Fatalf("failed to register: %v", err)
-	}
 
-	// Listen on a UDP port to receive the packet that will be sent through the nfqueue path
-	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer listener.Close()
-	listener.SetReadDeadline(time.Now().Add(2 * time.Second))
-
-	// Send a UDP packet to trigger the nfqueue callback
-	conn, err := net.Dial("udp", listener.LocalAddr().String())
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
-	conn.Write([]byte("test-packet"))
-	conn.Close()
-
-	buf := make([]byte, 256)
-	n, _, err := listener.ReadFromUDP(buf)
-	if err != nil {
-		t.Fatalf("packet not delivered (nfqueue receive/verdict broken): %v", err)
-	}
-	if got := string(buf[:n]); got != "test-packet" {
-		t.Errorf("received %q, want %q", got, "test-packet")
-	}
-	if !callbackFired.Load() {
-		t.Error("nfqueue callback was never invoked")
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
