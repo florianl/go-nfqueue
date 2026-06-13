@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jsimonetti/rtnetlink"
+	"github.com/jsimonetti/rtnetlink/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
