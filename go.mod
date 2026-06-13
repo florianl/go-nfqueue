@@ -14,4 +14,4 @@ require (
 	golang.org/x/net v0.35.0 // indirect
 )
 
-go 1.18
+go 1.24.0
