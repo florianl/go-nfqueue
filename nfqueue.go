@@ -17,8 +17,8 @@ var _ Logger = (*devNull)(nil)
 // devNull satisfies the Logger interface.
 type devNull struct{}
 
-func (dn *devNull) Debugf(format string, args ...interface{}) {}
-func (dn *devNull) Errorf(format string, args ...interface{}) {}
+func (dn *devNull) Debugf(format string, args ...any) {}
+func (dn *devNull) Errorf(format string, args ...any) {}
 
 // Close the connection to the netfilter queue subsystem
 func (nfqueue *Nfqueue) Close() error {
@@ -250,8 +250,8 @@ type Nfqueue struct {
 
 // Logger provides logging functionality.
 type Logger interface {
-	Debugf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
+	Debugf(format string, args ...any)
+	Errorf(format string, args ...any)
 }
 
 // Open a connection to the netfilter queue subsystem
