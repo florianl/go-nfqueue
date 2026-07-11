@@ -1,3 +1,11 @@
+# ⚠️ DEPRECATION NOTICE
+
+**go-nfqueue v1.x is no longer maintained. Please upgrade to [v2](https://github.com/florianl/go-nfqueue/tree/main).**
+
+All v1 versions have been retracted and will not receive security patches or bug fixes.
+
+---
+
 go-nfqueue [![PkgGoDev](https://pkg.go.dev/badge/github.com/florianl/go-nfqueue)](https://pkg.go.dev/github.com/florianl/go-nfqueue) [![Build Status](https://travis-ci.org/florianl/go-nfqueue.svg?branch=master)](https://travis-ci.org/florianl/go-nfqueue) [![Go Report Card](https://goreportcard.com/badge/github.com/florianl/go-nfqueue)](https://goreportcard.com/report/github.com/florianl/go-nfqueue)
 ============
 

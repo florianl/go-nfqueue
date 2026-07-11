@@ -1,5 +1,11 @@
 module github.com/florianl/go-nfqueue
 
+// DEPRECATED: This module version is deprecated. Please upgrade to github.com/florianl/go-nfqueue/v2.
+// All v1.x versions are retracted as they are no longer maintained.
+retract (
+	[v1.0.0, v1.3.3] // All v1.x versions are deprecated and no longer maintained
+)
+
 require (
 	github.com/mdlayher/netlink v1.7.2
 	golang.org/x/sys v0.20.0
