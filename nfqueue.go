@@ -22,12 +22,17 @@ func (dn *devNull) Errorf(format string, args ...any) {}
 
 // Close the connection to the netfilter queue subsystem
 func (nfqueue *Nfqueue) Close() error {
-	err := nfqueue.Con.Close()
 	if nfqueue.ctxCancel != nil {
 		nfqueue.ctxCancel()
 	}
+	// Wait for the read loop to stop so it can send its graceful
+	// per-queue unbind (see socketCallback) before the socket close.
+	// Otherwise that unbind silently fails, leaving kernel to reap
+	// the queue instance asynchronously, which can rase with a fast
+	// reconnect and make the kernel reject the rebind with EPERM.
 	nfqueue.wg.Wait()
-	return err
+
+	return nfqueue.Con.Close()
 }
 
 // SetVerdictWithMark signals the kernel the next action and the mark for a specified package id
