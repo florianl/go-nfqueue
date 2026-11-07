@@ -6,6 +6,8 @@ updates:
       interval: weekly
   - package-ecosystem: gomod
     open-pull-requests-limit: 5
-    directory: /
+    directories:
+      - /
+      - /internal/integration
     schedule:
       interval: weekly

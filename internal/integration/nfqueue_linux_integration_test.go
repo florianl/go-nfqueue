@@ -1,6 +1,6 @@
 //go:build integration && linux
 
-package nfqueue
+package integration
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	nfqueue "github.com/florianl/go-nfqueue/v2"
 	"github.com/jsimonetti/rtnetlink/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
@@ -37,14 +38,14 @@ func TestLinuxNfqueue(t *testing.T) {
 	startDummyPingTraffic(t, pingCtx)
 
 	// Set configuration options for nfqueue
-	config := Config{
+	config := nfqueue.Config{
 		NfQueue:      100,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
-		Copymode:     NfQnlCopyPacket,
+		Copymode:     nfqueue.NfQnlCopyPacket,
 	}
 	// Open a socket to the netfilter log subsystem
-	nfq, err := Open(&config)
+	nfq, err := nfqueue.Open(&config)
 	if err != nil {
 		t.Fatalf("failed to open nfqueue socket: %v", err)
 	}
@@ -53,11 +54,11 @@ func TestLinuxNfqueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	fn := func(a Attribute) int {
+	fn := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
 		t.Logf("[%d]\t%v\n", id, *a.Payload)
-		nfq.SetVerdict(id, NfAccept)
+		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
 
@@ -73,14 +74,14 @@ func TestLinuxNfqueue(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	// Set configuration options for nfqueue
-	config := Config{
+	config := nfqueue.Config{
 		NfQueue:      123,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
-		Copymode:     NfQnlCopyPacket,
+		Copymode:     nfqueue.NfQnlCopyPacket,
 	}
 
-	nfq, err := Open(&config)
+	nfq, err := nfqueue.Open(&config)
 	if err != nil {
 		t.Fatalf("failed to open nfqueue socket: %v", err)
 	}
@@ -88,11 +89,11 @@ func TestTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 
-	fn := func(a Attribute) int {
+	fn := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
 		t.Logf("[%d]\t%v\n", id, *a.Payload)
-		nfq.SetVerdict(id, NfAccept)
+		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
 
@@ -161,11 +162,11 @@ table inet test-nfqueue {
 		}
 
 		// Prepare nfq
-		nfq, err := Open(&Config{
+		nfq, err := nfqueue.Open(&nfqueue.Config{
 			NfQueue:      200,
 			MaxPacketLen: 0xFFFF,
 			MaxQueueLen:  0xFF,
-			Copymode:     NfQnlCopyPacket,
+			Copymode:     nfqueue.NfQnlCopyPacket,
 			WriteTimeout: 100 * time.Millisecond,
 		})
 		if err != nil {
@@ -177,9 +178,9 @@ table inet test-nfqueue {
 		defer cancel()
 
 		var callbackFired atomic.Bool
-		err = nfq.RegisterWithErrorFunc(ctx, func(a Attribute) int {
+		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
 			callbackFired.Store(true)
-			nfq.SetVerdict(*a.PacketID, NfAccept)
+			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
 			return 0
 		}, func(err error) int {
 			// Timeouts return an error "netlink receive: use of closed file".
