@@ -3,7 +3,7 @@ module github.com/florianl/go-nfqueue/v2
 require (
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
 	github.com/mdlayher/netlink v1.11.2
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.45.0
 )
 
@@ -20,7 +20,7 @@ require (
 	mvdan.cc/gofumpt v0.9.2 // indirect
 )
 
-go 1.25.0
+go 1.26.0
 
 tool (
 	honnef.co/go/tools/cmd/staticcheck
