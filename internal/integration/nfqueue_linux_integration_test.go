@@ -7,17 +7,12 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"runtime"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue/v2"
-	"github.com/jsimonetti/rtnetlink/v2"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sys/unix"
 )
 
 func startDummyPingTraffic(t *testing.T, ctx context.Context) {
@@ -110,39 +105,10 @@ func TestTimeout(t *testing.T) {
 	<-ctx.Done()
 }
 
-// TODO: check if lo is already up.
-// TODO: if lo is not up yet, turn it down after the test again.
-func changeLoIFaceState(t *testing.T) error {
-	t.Helper()
-	loIFace, err := net.InterfaceByName("lo")
-	if err != nil {
-		return err
-	}
-	con, err := rtnetlink.Dial(nil)
-	if err != nil {
-		return err
-	}
-
-	return con.Link.Set(&rtnetlink.LinkMessage{
-		Family: unix.AF_UNSPEC,
-		Index:  uint32(loIFace.Index),
-		Flags:  unix.IFF_UP,
-		Change: unix.IFF_UP,
-	})
-}
-
 func TestNfqueuePacketPath(t *testing.T) {
-	var g errgroup.Group
-	g.Go(func() error {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("failed to unshare network namespace: %v", err)
-		}
-
+	inNetNS(t, func() error {
 		// Bring up the loopback interface so that packets can be sent through the nfqueue path.
-		if err := changeLoIFaceState(t); err != nil {
+		if err := setLinkUp("lo"); err != nil {
 			return err
 		}
 
@@ -223,8 +189,4 @@ table inet test-nfqueue {
 		}
 		return nil
 	})
-
-	if err := g.Wait(); err != nil {
-		t.Fatal(err)
-	}
 }
