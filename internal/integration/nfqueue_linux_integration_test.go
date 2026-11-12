@@ -14,6 +14,7 @@ import (
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue/v2"
+	"golang.org/x/net/ipv4"
 	"golang.org/x/sys/unix"
 )
 
@@ -197,5 +198,95 @@ func TestNfqueuePacketPath(t *testing.T) {
 				return nil
 			}
 		}
+	})
+}
+
+func TestNfqueuePayloadNotOverwritten(t *testing.T) {
+	inNetNS(t, func() (err error) {
+		const port = 9999
+		cfg := nfqueue.Config{
+			NfQueue:      200,
+			MaxPacketLen: 0xFFFF,
+			MaxQueueLen:  0xFF,
+			Copymode:     nfqueue.NfQnlCopyPacket,
+		}
+
+		_, cleanup, err := setupDummy("dummy0", dummyPrefix)
+		if err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, cleanup()) }()
+
+		nfq, addr, err := openQueue(cfg, port)
+		if err != nil {
+			return err
+		}
+		defer nfq.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		const packets = 10
+		// Gather payloads and block until N of them are received
+		var mu sync.Mutex
+		var payloads [][]byte
+		done := make(chan struct{})
+		errc := make(chan error, 1)
+		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
+			mu.Lock()
+			payloads = append(payloads, *a.Payload)
+			if len(payloads) == packets {
+				close(done)
+			}
+			mu.Unlock()
+			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+			return 0
+		}, func(err error) int {
+			// Cancelling ctx unblocks the receive with a "closed file" error.
+			if ctx.Err() == nil {
+				errc <- err
+			}
+			return 1
+		})
+		if err != nil {
+			return fmt.Errorf("failed to register: %v", err)
+		}
+
+		conn, err := net.DialUDP("udp4", nil, addr)
+		if err != nil {
+			return fmt.Errorf("failed to dial: %v", err)
+		}
+		defer conn.Close()
+		for i := range packets {
+			if _, err := fmt.Fprintf(conn, "packet-%d", i); err != nil {
+				return fmt.Errorf("failed to send: %v", err)
+			}
+		}
+
+		select {
+		case <-done:
+		case err := <-errc:
+			return fmt.Errorf("receive: %w", err)
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for %d packets", packets)
+		}
+
+		// We expect no writes to the payloads after <-done
+		// but we lock anyways to be defensive.
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Map distinct received messages
+		const udpHeaderLen = 8
+		received := make(map[string]bool)
+		for _, p := range payloads {
+			received[string(p[ipv4.HeaderLen+udpHeaderLen:])] = true
+		}
+		for i := range packets {
+			if want := fmt.Sprintf("packet-%d", i); !received[want] {
+				return fmt.Errorf("payload %q missing or overwritten", want)
+			}
+		}
+		return nil
 	})
 }
