@@ -259,6 +259,31 @@ type Logger interface {
 	Errorf(format string, args ...any)
 }
 
+// messageBufferSize returns a receive buffer size that fits any message the
+// kernel sends for config, so netlink can skip peeking before each read.
+func messageBufferSize(config *Config) int {
+	const (
+		// https://github.com/torvalds/linux/blob/v7.3/net/netfilter/nfnetlink_queue.c#L69
+		maxCopyRange = 0xffff - unix.NLA_HDRLEN
+		// Upper bound for the headers around the payload. The kernel sizes them
+		// per packet and conntrack/secctx vary, so there is no exact value:
+		// https://github.com/torvalds/linux/blob/v7.3/net/netfilter/nfnetlink_queue.c#L741-L816
+		// https://git.netfilter.org/libnetfilter_queue/tree/examples/nf-queue.c?id=87405a48a72460392935efb67705f3d3733306de#n147
+		nlMsgOverhead = 4096
+	)
+
+	size := nlMsgOverhead
+	if config.Copymode == NfQnlCopyPacket {
+		// The kernel copies up to maxCopyRange when MaxPacketLen is 0 or larger.
+		if config.MaxPacketLen > 0 && config.MaxPacketLen < maxCopyRange {
+			size += int(config.MaxPacketLen)
+		} else {
+			size += maxCopyRange
+		}
+	}
+	return size
+}
+
 // Open a connection to the netfilter queue subsystem
 func Open(config *Config) (*Nfqueue, error) {
 	var nfqueue Nfqueue
@@ -267,7 +292,10 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, ErrInvFlag
 	}
 
-	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{NetNS: config.NetNS})
+	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{
+		NetNS:             config.NetNS,
+		MessageBufferSize: messageBufferSize(config),
+	})
 	if err != nil {
 		return nil, err
 	}

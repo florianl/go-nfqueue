@@ -5,7 +5,9 @@ package integration
 import (
 	"fmt"
 	"net"
+	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -52,6 +54,23 @@ func setLinkUp(name string) error {
 		Attributes: &rtnetlink.LinkAttributes{MTU: mtu},
 	}); err != nil {
 		return fmt.Errorf("set %s up: %w", name, err)
+	}
+	return nil
+}
+
+// queueOutput queues all locally generated packets to nfqueue num.
+func queueOutput(num uint16) error {
+	cmd := exec.Command("nft", "-f", "-")
+	cmd.Stdin = strings.NewReader(fmt.Sprintf(`
+table inet test-nfqueue {
+	chain output {
+		type filter hook output priority 0; policy accept;
+		queue num %d
+	}
+}
+`, num))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set up nftables: %v: %s", err, out)
 	}
 	return nil
 }

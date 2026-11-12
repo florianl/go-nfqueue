@@ -6,8 +6,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os/exec"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -31,7 +29,6 @@ func BenchmarkThroughput(b *testing.B) {
 }
 
 func runReceiveBench(b *testing.B, packetSize int) {
-	const port = 9999
 	cfg := nfqueue.Config{
 		NfQueue:      200,
 		Copymode:     nfqueue.NfQnlCopyPacket,
@@ -43,19 +40,8 @@ func runReceiveBench(b *testing.B, packetSize int) {
 		if err := setLinkUp("lo"); err != nil {
 			return err
 		}
-
-		// Queue the writers' UDP traffic.
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = strings.NewReader(fmt.Sprintf(`
-table inet nfqueue-test {
-	chain output {
-		type filter hook output priority 0; policy accept;
-		udp dport %d queue num %d
-	}
-}
-`, port, cfg.NfQueue))
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("nft: %w: %s", err, out)
+		if err := queueOutput(cfg.NfQueue); err != nil {
+			return err
 		}
 
 		nfq, err := nfqueue.Open(&cfg)
@@ -91,8 +77,7 @@ table inet nfqueue-test {
 		}
 
 		// The listener discards everything the writers send.
-		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}
-		listener, err := net.ListenUDP("udp4", addr)
+		listener, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 		if err != nil {
 			return fmt.Errorf("listen: %w", err)
 		}
@@ -110,7 +95,7 @@ table inet nfqueue-test {
 		const writers = 4
 		conns := make([]net.Conn, writers)
 		for i := range conns {
-			conn, err := net.DialUDP("udp4", nil, addr)
+			conn, err := net.Dial("udp4", listener.LocalAddr().String())
 			if err != nil {
 				return fmt.Errorf("dial: %w", err)
 			}
