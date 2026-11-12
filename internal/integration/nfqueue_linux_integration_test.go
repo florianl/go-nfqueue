@@ -1,22 +1,19 @@
 //go:build integration && linux
 
-package nfqueue
+package integration
 
 import (
 	"context"
 	"fmt"
 	"net"
 	"os/exec"
-	"runtime"
-	"strings"
+	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/jsimonetti/rtnetlink/v2"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sys/unix"
+	nfqueue "github.com/florianl/go-nfqueue/v2"
+	"golang.org/x/net/ipv4"
 )
 
 func startDummyPingTraffic(t *testing.T, ctx context.Context) {
@@ -37,14 +34,14 @@ func TestLinuxNfqueue(t *testing.T) {
 	startDummyPingTraffic(t, pingCtx)
 
 	// Set configuration options for nfqueue
-	config := Config{
+	config := nfqueue.Config{
 		NfQueue:      100,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
-		Copymode:     NfQnlCopyPacket,
+		Copymode:     nfqueue.NfQnlCopyPacket,
 	}
 	// Open a socket to the netfilter log subsystem
-	nfq, err := Open(&config)
+	nfq, err := nfqueue.Open(&config)
 	if err != nil {
 		t.Fatalf("failed to open nfqueue socket: %v", err)
 	}
@@ -53,11 +50,11 @@ func TestLinuxNfqueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	fn := func(a Attribute) int {
+	fn := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
 		t.Logf("[%d]\t%v\n", id, *a.Payload)
-		nfq.SetVerdict(id, NfAccept)
+		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
 
@@ -73,14 +70,14 @@ func TestLinuxNfqueue(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	// Set configuration options for nfqueue
-	config := Config{
+	config := nfqueue.Config{
 		NfQueue:      123,
 		MaxPacketLen: 0xFFFF,
 		MaxQueueLen:  0xFF,
-		Copymode:     NfQnlCopyPacket,
+		Copymode:     nfqueue.NfQnlCopyPacket,
 	}
 
-	nfq, err := Open(&config)
+	nfq, err := nfqueue.Open(&config)
 	if err != nil {
 		t.Fatalf("failed to open nfqueue socket: %v", err)
 	}
@@ -88,11 +85,11 @@ func TestTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 
-	fn := func(a Attribute) int {
+	fn := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
 		// Just print out the id and payload of the nfqueue packet
 		t.Logf("[%d]\t%v\n", id, *a.Payload)
-		nfq.SetVerdict(id, NfAccept)
+		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
 
@@ -109,63 +106,24 @@ func TestTimeout(t *testing.T) {
 	<-ctx.Done()
 }
 
-// TODO: check if lo is already up.
-// TODO: if lo is not up yet, turn it down after the test again.
-func changeLoIFaceState(t *testing.T) error {
-	t.Helper()
-	loIFace, err := net.InterfaceByName("lo")
-	if err != nil {
-		return err
-	}
-	con, err := rtnetlink.Dial(nil)
-	if err != nil {
-		return err
-	}
-
-	return con.Link.Set(&rtnetlink.LinkMessage{
-		Family: unix.AF_UNSPEC,
-		Index:  uint32(loIFace.Index),
-		Flags:  unix.IFF_UP,
-		Change: unix.IFF_UP,
-	})
-}
-
 func TestNfqueuePacketPath(t *testing.T) {
-	var g errgroup.Group
-	g.Go(func() error {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("failed to unshare network namespace: %v", err)
-		}
-
+	inNetNS(t, func() error {
 		// Bring up the loopback interface so that packets can be sent through the nfqueue path.
-		if err := changeLoIFaceState(t); err != nil {
+		if err := setLinkUp("lo"); err != nil {
 			return err
 		}
 
 		// Prepare nft
-		nftRules := strings.NewReader(`
-table inet test-nfqueue {
-	chain output {
-		type filter hook output priority 0; policy accept;
-		queue num 200
-	}
-}
-`)
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = nftRules
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to set up nftables: %v: %s", err, out)
+		if err := queueOutput(200); err != nil {
+			return err
 		}
 
 		// Prepare nfq
-		nfq, err := Open(&Config{
+		nfq, err := nfqueue.Open(&nfqueue.Config{
 			NfQueue:      200,
 			MaxPacketLen: 0xFFFF,
 			MaxQueueLen:  0xFF,
-			Copymode:     NfQnlCopyPacket,
+			Copymode:     nfqueue.NfQnlCopyPacket,
 			WriteTimeout: 100 * time.Millisecond,
 		})
 		if err != nil {
@@ -177,9 +135,9 @@ table inet test-nfqueue {
 		defer cancel()
 
 		var callbackFired atomic.Bool
-		err = nfq.RegisterWithErrorFunc(ctx, func(a Attribute) int {
+		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
 			callbackFired.Store(true)
-			nfq.SetVerdict(*a.PacketID, NfAccept)
+			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
 			return 0
 		}, func(err error) int {
 			// Timeouts return an error "netlink receive: use of closed file".
@@ -222,8 +180,94 @@ table inet test-nfqueue {
 		}
 		return nil
 	})
+}
 
-	if err := g.Wait(); err != nil {
-		t.Fatal(err)
-	}
+func TestNfqueuePayloadNotOverwritten(t *testing.T) {
+	inNetNS(t, func() error {
+		if err := setLinkUp("lo"); err != nil {
+			return err
+		}
+		if err := queueOutput(200); err != nil {
+			return err
+		}
+
+		nfq, err := nfqueue.Open(&nfqueue.Config{
+			NfQueue:      200,
+			MaxPacketLen: 0xFFFF,
+			MaxQueueLen:  0xFF,
+			Copymode:     nfqueue.NfQnlCopyPacket,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to open nfqueue: %v", err)
+		}
+		defer nfq.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		const packets = 10
+		// Gether payloads and block until N of them are received
+		var mu sync.Mutex
+		var payloads [][]byte
+		done := make(chan struct{})
+		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
+			mu.Lock()
+			payloads = append(payloads, *a.Payload)
+			if len(payloads) == packets {
+				close(done)
+			}
+			mu.Unlock()
+			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+			return 0
+		}, func(err error) int {
+			if ctx.Err() == nil {
+				t.Errorf("nfqueue error: %v", err)
+			}
+			return 0
+		})
+		if err != nil {
+			return fmt.Errorf("failed to register: %v", err)
+		}
+
+		listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			return fmt.Errorf("failed to listen: %v", err)
+		}
+		defer listener.Close()
+
+		conn, err := net.Dial("udp", listener.LocalAddr().String())
+		if err != nil {
+			return fmt.Errorf("failed to dial: %v", err)
+		}
+		defer conn.Close()
+		for i := range packets {
+			if _, err := fmt.Fprintf(conn, "packet-%d", i); err != nil {
+				return fmt.Errorf("failed to send: %v", err)
+			}
+		}
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for %d packets", packets)
+		}
+
+		// We expect no writes to the payloads after <-done
+		// but we lock anyways to be defensive.
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Map distinct received messages
+		const udpHeaderLen = 8
+		received := make(map[string]bool)
+		for _, p := range payloads {
+			received[string(p[ipv4.HeaderLen+udpHeaderLen:])] = true
+		}
+		for i := range packets {
+			if want := fmt.Sprintf("packet-%d", i); !received[want] {
+				return fmt.Errorf("payload %q missing or overwritten", want)
+			}
+		}
+		return nil
+	})
 }

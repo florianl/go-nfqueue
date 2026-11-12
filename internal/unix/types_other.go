@@ -9,4 +9,5 @@ const (
 	AF_UNSPEC         = 0x0
 	NFNETLINK_V0      = 0x0
 	NETLINK_NETFILTER = 0xc
+	NLA_HDRLEN        = 0x4
 )

@@ -14,4 +14,5 @@ const (
 	AF_UNSPEC         = linux.AF_UNSPEC
 	NFNETLINK_V0      = linux.NFNETLINK_V0
 	NETLINK_NETFILTER = linux.NETLINK_NETFILTER
+	NLA_HDRLEN        = linux.NLA_HDRLEN
 )
