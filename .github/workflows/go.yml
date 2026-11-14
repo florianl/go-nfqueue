@@ -28,6 +28,7 @@ jobs:
       run: go test -race -count=1 ./...
     - name: Integration test
       if: matrix.platform == 'ubuntu-latest' && startsWith(matrix.go-version, 'stable')
+      working-directory: internal/integration
       run: |
         sudo modprobe nfnetlink_queue
         sudo ip6tables -I OUTPUT -p ipv6-icmp -j NFQUEUE --queue-num 100
