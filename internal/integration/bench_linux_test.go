@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -40,7 +41,7 @@ func runReceiveBench(b *testing.B, packetSize int) {
 	}
 
 	inNetNS(b, func() error {
-		if err := setLinkUp("lo"); err != nil {
+		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
 			return err
 		}
 
@@ -90,21 +91,7 @@ table inet nfqueue-test {
 			return fmt.Errorf("register: %w", err)
 		}
 
-		// The listener discards everything the writers send.
-		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}
-		listener, err := net.ListenUDP("udp4", addr)
-		if err != nil {
-			return fmt.Errorf("listen: %w", err)
-		}
-		defer listener.Close()
-		go func() {
-			buf := make([]byte, 2048)
-			for {
-				if _, err := listener.Read(buf); err != nil {
-					return
-				}
-			}
-		}()
+		addr := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: port}
 
 		// Several writers, each with its own socket, keep the queue saturated.
 		const writers = 4

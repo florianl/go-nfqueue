@@ -5,6 +5,7 @@ package integration
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime"
 	"syscall"
 	"testing"
@@ -31,27 +32,43 @@ func inNetNS(tb testing.TB, fn func() error) {
 	}
 }
 
-// setLinkUp brings up the named interface with a 1500-byte MTU.
-func setLinkUp(name string) error {
-	const mtu = 1500
-	iface, err := net.InterfaceByName(name)
-	if err != nil {
-		return fmt.Errorf("lookup %s: %w", name, err)
-	}
+// setupDummy creates an up dummy interface with the given address. Send to
+// another address in prefix, not the interface's own, to route through it.
+func setupDummy(name string, prefix netip.Prefix) error {
 	con, err := rtnetlink.Dial(nil)
 	if err != nil {
 		return fmt.Errorf("dial rtnetlink: %w", err)
 	}
 	defer con.Close()
 
-	if err := con.Link.Set(&rtnetlink.LinkMessage{
-		Family:     unix.AF_UNSPEC,
-		Index:      uint32(iface.Index),
-		Flags:      unix.IFF_UP,
-		Change:     unix.IFF_UP,
-		Attributes: &rtnetlink.LinkAttributes{MTU: mtu},
+	if err := con.Link.New(&rtnetlink.LinkMessage{
+		Family: unix.AF_UNSPEC,
+		Flags:  unix.IFF_UP,
+		Change: unix.IFF_UP,
+		Attributes: &rtnetlink.LinkAttributes{
+			Name: name,
+			Info: &rtnetlink.LinkInfo{Kind: "dummy"},
+		},
 	}); err != nil {
-		return fmt.Errorf("set %s up: %w", name, err)
+		return fmt.Errorf("create %s: %w", name, err)
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return fmt.Errorf("lookup %s: %w", name, err)
+	}
+
+	addr := net.IP(prefix.Addr().AsSlice())
+	if err := con.Address.New(&rtnetlink.AddressMessage{
+		Family:       unix.AF_INET,
+		PrefixLength: uint8(prefix.Bits()),
+		Scope:        unix.RT_SCOPE_UNIVERSE,
+		Index:        uint32(iface.Index),
+		Attributes: &rtnetlink.AddressAttributes{
+			Address: addr,
+			Local:   addr,
+		},
+	}); err != nil {
+		return fmt.Errorf("add %s to %s: %w", prefix, name, err)
 	}
 	return nil
 }
