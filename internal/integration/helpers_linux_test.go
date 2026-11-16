@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/google/nftables"
+	"github.com/google/nftables/binaryutil"
+	"github.com/google/nftables/expr"
 	"github.com/jsimonetti/rtnetlink/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
@@ -69,6 +72,48 @@ func setupDummy(name string, prefix netip.Prefix) error {
 		},
 	}); err != nil {
 		return fmt.Errorf("add %s to %s: %w", prefix, name, err)
+	}
+	return nil
+}
+
+// queueUDP installs an nftables rule that queues outgoing UDP packets for
+// dport to the given nfqueue, like "udp dport <dport> queue num <queue>".
+func queueUDP(dport, queue uint16) error {
+	conn, err := nftables.New()
+	if err != nil {
+		return fmt.Errorf("open nftables: %w", err)
+	}
+	table := conn.AddTable(&nftables.Table{
+		Family: nftables.TableFamilyINet,
+		Name:   "nfqueue-test",
+	})
+	policy := nftables.ChainPolicyAccept
+	chain := conn.AddChain(&nftables.Chain{
+		Name:     "output",
+		Table:    table,
+		Type:     nftables.ChainTypeFilter,
+		Hooknum:  nftables.ChainHookOutput,
+		Priority: nftables.ChainPriorityFilter,
+		Policy:   &policy,
+	})
+	conn.AddRule(&nftables.Rule{
+		Table: table,
+		Chain: chain,
+		Exprs: []expr.Any{
+			&expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{unix.IPPROTO_UDP}},
+			&expr.Payload{
+				DestRegister: 1,
+				Base:         expr.PayloadBaseTransportHeader,
+				Offset:       2, // UDP destination port
+				Len:          2,
+			},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: binaryutil.BigEndian.PutUint16(dport)},
+			&expr.Queue{Num: queue},
+		},
+	})
+	if err := conn.Flush(); err != nil {
+		return fmt.Errorf("install nftables rule: %w", err)
 	}
 	return nil
 }

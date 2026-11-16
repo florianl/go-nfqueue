@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/netip"
 	"os/exec"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -109,33 +108,24 @@ func TestTimeout(t *testing.T) {
 
 func TestNfqueuePacketPath(t *testing.T) {
 	inNetNS(t, func() error {
-		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
-			return err
-		}
-
-		// Prepare nft
-		nftRules := strings.NewReader(`
-table inet test-nfqueue {
-	chain output {
-		type filter hook output priority 0; policy accept;
-		udp dport 9999 queue num 200
-	}
-}
-`)
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = nftRules
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to set up nftables: %v: %s", err, out)
-		}
-
-		// Prepare nfq
-		nfq, err := nfqueue.Open(&nfqueue.Config{
+		const port = 9999
+		cfg := nfqueue.Config{
 			NfQueue:      200,
 			MaxPacketLen: 0xFFFF,
 			MaxQueueLen:  0xFF,
 			Copymode:     nfqueue.NfQnlCopyPacket,
 			WriteTimeout: 100 * time.Millisecond,
-		})
+		}
+
+		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
+			return err
+		}
+
+		if err := queueUDP(port, cfg.NfQueue); err != nil {
+			return err
+		}
+
+		nfq, err := nfqueue.Open(&cfg)
 		if err != nil {
 			return fmt.Errorf("failed to open nfqueue: %v", err)
 		}
@@ -167,7 +157,7 @@ table inet test-nfqueue {
 		}
 
 		// Send a UDP packet to trigger the nfqueue callback
-		conn, err := net.Dial("udp4", "10.0.0.2:9999")
+		conn, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: port})
 		if err != nil {
 			return fmt.Errorf("failed to dial: %v", err)
 		}

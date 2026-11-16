@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os/exec"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -32,31 +30,22 @@ func BenchmarkThroughput(b *testing.B) {
 }
 
 func runReceiveBench(b *testing.B, packetSize int) {
-	const port = 9999
-	cfg := nfqueue.Config{
-		NfQueue:      200,
-		Copymode:     nfqueue.NfQnlCopyPacket,
-		MaxQueueLen:  4096,
-		MaxPacketLen: 0xFFFF, // copy the whole packet
-	}
-
 	inNetNS(b, func() error {
+		const port = 9999
+		cfg := nfqueue.Config{
+			NfQueue:      200,
+			Copymode:     nfqueue.NfQnlCopyPacket,
+			MaxQueueLen:  4096,
+			MaxPacketLen: 0xFFFF, // copy the whole packet
+		}
+
 		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
 			return err
 		}
 
 		// Queue the writers' UDP traffic.
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = strings.NewReader(fmt.Sprintf(`
-table inet nfqueue-test {
-	chain output {
-		type filter hook output priority 0; policy accept;
-		udp dport %d queue num %d
-	}
-}
-`, port, cfg.NfQueue))
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("nft: %w: %s", err, out)
+		if err := queueUDP(port, cfg.NfQueue); err != nil {
+			return err
 		}
 
 		nfq, err := nfqueue.Open(&cfg)

@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/florianl/go-nfqueue/v2 v2.0.0
+	github.com/google/nftables v0.3.0
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.22.0
