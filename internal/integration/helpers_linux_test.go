@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 
+	nfqueue "github.com/florianl/go-nfqueue/v2"
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
 	"github.com/google/nftables/expr"
@@ -116,4 +117,21 @@ func queueUDP(dport, queue uint16) error {
 		return fmt.Errorf("install nftables rule: %w", err)
 	}
 	return nil
+}
+
+// openQueue sets up a dummy interface, queues outgoing UDP traffic for port
+// to cfg.NfQueue and opens the queue. Packets sent to the returned address
+// go through the queue.
+func openQueue(cfg nfqueue.Config, port uint16) (*nfqueue.Nfqueue, *net.UDPAddr, error) {
+	if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
+		return nil, nil, err
+	}
+	if err := queueUDP(port, cfg.NfQueue); err != nil {
+		return nil, nil, err
+	}
+	nfq, err := nfqueue.Open(&cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open nfqueue: %w", err)
+	}
+	return nfq, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: int(port)}, nil
 }

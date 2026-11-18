@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/netip"
 	"os/exec"
 	"sync"
 	"testing"
@@ -117,17 +116,9 @@ func TestNfqueuePacketPath(t *testing.T) {
 			WriteTimeout: 100 * time.Millisecond,
 		}
 
-		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
-			return err
-		}
-
-		if err := queueUDP(port, cfg.NfQueue); err != nil {
-			return err
-		}
-
-		nfq, err := nfqueue.Open(&cfg)
+		nfq, addr, err := openQueue(cfg, port)
 		if err != nil {
-			return fmt.Errorf("failed to open nfqueue: %v", err)
+			return err
 		}
 		defer nfq.Close()
 
@@ -157,7 +148,7 @@ func TestNfqueuePacketPath(t *testing.T) {
 		}
 
 		// Send a UDP packet to trigger the nfqueue callback
-		conn, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: port})
+		conn, err := net.DialUDP("udp4", nil, addr)
 		if err != nil {
 			return fmt.Errorf("failed to dial: %v", err)
 		}

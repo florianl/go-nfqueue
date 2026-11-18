@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/netip"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -39,21 +39,13 @@ func runReceiveBench(b *testing.B, packetSize int) {
 			MaxPacketLen: 0xFFFF, // copy the whole packet
 		}
 
-		if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
-			return err
-		}
-
-		// Queue the writers' UDP traffic.
-		if err := queueUDP(port, cfg.NfQueue); err != nil {
-			return err
-		}
-
-		nfq, err := nfqueue.Open(&cfg)
+		nfq, addr, err := openQueue(cfg, port)
 		if err != nil {
-			return fmt.Errorf("open nfqueue: %w", err)
+			return err
 		}
 		defer nfq.Close()
-		// Size the socket buffer for a full queue so no netlink message is dropped.
+		// Request a large socket buffer, which the kernel caps at
+		// net.core.rmem_max.
 		if err := nfq.Con.SetReadBuffer(64 << 20); err != nil {
 			return fmt.Errorf("set read buffer: %w", err)
 		}
@@ -62,6 +54,7 @@ func runReceiveBench(b *testing.B, packetSize int) {
 		defer cancel()
 
 		done := make(chan struct{})
+		errc := make(chan error, 1)
 		var handled atomic.Int64
 		if err := nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
 			// Accept every packet and close done once b.N have been handled.
@@ -73,14 +66,12 @@ func runReceiveBench(b *testing.B, packetSize int) {
 		}, func(err error) int {
 			// Cancelling ctx unblocks the receive with a "closed file" error.
 			if ctx.Err() == nil {
-				b.Errorf("receive: %v", err)
+				errc <- err
 			}
 			return 1
 		}); err != nil {
 			return fmt.Errorf("register: %w", err)
 		}
-
-		addr := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: port}
 
 		// Several writers, each with its own socket, keep the queue saturated.
 		const writers = 4
@@ -93,6 +84,13 @@ func runReceiveBench(b *testing.B, packetSize int) {
 			defer conn.Close()
 			conns[i] = conn
 		}
+		var wg sync.WaitGroup
+		// Cancel the writers and wait for them to stop before their sockets
+		// are closed.
+		defer func() {
+			cancel()
+			wg.Wait()
+		}()
 
 		// payloadSize is the wire packet minus the IP and UDP headers.
 		const udpHeaderLen = 8
@@ -102,14 +100,18 @@ func runReceiveBench(b *testing.B, packetSize int) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for _, conn := range conns {
-			go func() {
+			wg.Go(func() {
 				buf := make([]byte, payloadSize)
 				for ctx.Err() == nil {
 					conn.Write(buf)
 				}
-			}()
+			})
 		}
-		<-done
+		select {
+		case <-done:
+		case err := <-errc:
+			return fmt.Errorf("receive: %w", err)
+		}
 		b.StopTimer()
 		return nil
 	})
