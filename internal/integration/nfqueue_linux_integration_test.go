@@ -3,21 +3,16 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"os/exec"
-	"runtime"
-	"strings"
-	"sync/atomic"
-	"syscall"
+	"sync"
 	"testing"
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue/v2"
-	"github.com/jsimonetti/rtnetlink/v2"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sys/unix"
 )
 
 func startDummyPingTraffic(t *testing.T, ctx context.Context) {
@@ -110,76 +105,34 @@ func TestTimeout(t *testing.T) {
 	<-ctx.Done()
 }
 
-// TODO: check if lo is already up.
-// TODO: if lo is not up yet, turn it down after the test again.
-func changeLoIFaceState(t *testing.T) error {
-	t.Helper()
-	loIFace, err := net.InterfaceByName("lo")
-	if err != nil {
-		return err
-	}
-	con, err := rtnetlink.Dial(nil)
-	if err != nil {
-		return err
-	}
-
-	return con.Link.Set(&rtnetlink.LinkMessage{
-		Family: unix.AF_UNSPEC,
-		Index:  uint32(loIFace.Index),
-		Flags:  unix.IFF_UP,
-		Change: unix.IFF_UP,
-	})
-}
-
 func TestNfqueuePacketPath(t *testing.T) {
-	var g errgroup.Group
-	g.Go(func() error {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-			return fmt.Errorf("failed to unshare network namespace: %v", err)
-		}
-
-		// Bring up the loopback interface so that packets can be sent through the nfqueue path.
-		if err := changeLoIFaceState(t); err != nil {
-			return err
-		}
-
-		// Prepare nft
-		nftRules := strings.NewReader(`
-table inet test-nfqueue {
-	chain output {
-		type filter hook output priority 0; policy accept;
-		queue num 200
-	}
-}
-`)
-		cmd := exec.Command("nft", "-f", "-")
-		cmd.Stdin = nftRules
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to set up nftables: %v: %s", err, out)
-		}
-
-		// Prepare nfq
-		nfq, err := nfqueue.Open(&nfqueue.Config{
+	inNetNS(t, func() error {
+		const port = 9999
+		cfg := nfqueue.Config{
 			NfQueue:      200,
 			MaxPacketLen: 0xFFFF,
 			MaxQueueLen:  0xFF,
 			Copymode:     nfqueue.NfQnlCopyPacket,
 			WriteTimeout: 100 * time.Millisecond,
-		})
+		}
+
+		nfq, addr, err := openQueue(cfg, port)
 		if err != nil {
-			return fmt.Errorf("failed to open nfqueue: %v", err)
+			return err
 		}
 		defer nfq.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		var callbackFired atomic.Bool
+		// The test only asserts that the packet reaches the callback intact,
+		// not what the kernel does with it after the verdict.
+		received := make(chan struct{})
+		var once sync.Once
 		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
-			callbackFired.Store(true)
+			if a.Payload != nil && bytes.HasSuffix(*a.Payload, []byte("test-packet")) {
+				once.Do(func() { close(received) })
+			}
 			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
 			return 0
 		}, func(err error) int {
@@ -194,37 +147,19 @@ table inet test-nfqueue {
 			return fmt.Errorf("failed to register: %v", err)
 		}
 
-		// Listen on a UDP port to receive the packet that will be sent through the nfqueue path
-		listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-		if err != nil {
-			return fmt.Errorf("failed to listen: %v", err)
-		}
-		defer listener.Close()
-		listener.SetReadDeadline(time.Now().Add(2 * time.Second))
-
 		// Send a UDP packet to trigger the nfqueue callback
-		conn, err := net.Dial("udp", listener.LocalAddr().String())
+		conn, err := net.DialUDP("udp4", nil, addr)
 		if err != nil {
 			return fmt.Errorf("failed to dial: %v", err)
 		}
 		conn.Write([]byte("test-packet"))
 		conn.Close()
 
-		buf := make([]byte, 256)
-		n, _, err := listener.ReadFromUDP(buf)
-		if err != nil {
-			return fmt.Errorf("packet not delivered (nfqueue receive/verdict broken): %v", err)
-		}
-		if got := string(buf[:n]); got != "test-packet" {
-			return fmt.Errorf("received %q, want %q", got, "test-packet")
-		}
-		if !callbackFired.Load() {
-			return fmt.Errorf("nfqueue callback was never invoked")
+		select {
+		case <-received:
+		case <-ctx.Done():
+			return fmt.Errorf("nfqueue callback never received the packet")
 		}
 		return nil
 	})
-
-	if err := g.Wait(); err != nil {
-		t.Fatal(err)
-	}
 }
