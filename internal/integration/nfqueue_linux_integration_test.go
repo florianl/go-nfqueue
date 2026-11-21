@@ -205,10 +205,11 @@ func TestNfqueuePayloadNotOverwritten(t *testing.T) {
 	inNetNS(t, func() (err error) {
 		const port = 9999
 		cfg := nfqueue.Config{
-			NfQueue:      200,
-			MaxPacketLen: 0xFFFF,
-			MaxQueueLen:  0xFF,
-			Copymode:     nfqueue.NfQnlCopyPacket,
+			NfQueue:           200,
+			MaxPacketLen:      0xFFFF,
+			MaxQueueLen:       0xFF,
+			Copymode:          nfqueue.NfQnlCopyPacket,
+			PreallocateBuffer: true,
 		}
 
 		_, cleanup, err := setupDummy("dummy0", dummyPrefix)

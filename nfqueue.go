@@ -300,10 +300,11 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, ErrInvFlag
 	}
 
-	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{
-		NetNS:             config.NetNS,
-		MessageBufferSize: messageBufferSize(config),
-	})
+	ncfg := &netlink.Config{NetNS: config.NetNS}
+	if config.PreallocateBuffer {
+		ncfg.MessageBufferSize = messageBufferSize(config)
+	}
+	con, err := netlink.Dial(unix.NETLINK_NETFILTER, ncfg)
 	if err != nil {
 		return nil, err
 	}
