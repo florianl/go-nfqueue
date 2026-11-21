@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"syscall"
 	"testing"
+	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue/v2"
 	"github.com/google/nftables"
@@ -75,6 +76,32 @@ func setupDummy(name string, prefix netip.Prefix) error {
 		return fmt.Errorf("add %s to %s: %w", prefix, name, err)
 	}
 	return nil
+}
+
+// capturePackets opens an AF_PACKET socket that sees packets transmitted on
+// the named interface, with reads timing out after timeout.
+func capturePackets(name string, timeout time.Duration) (int, error) {
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return -1, fmt.Errorf("lookup %s: %w", name, err)
+	}
+	// Only ETH_P_ALL sockets see outgoing packets. The kernel expects it in
+	// network byte order.
+	proto := binaryutil.NativeEndian.Uint16(binaryutil.BigEndian.PutUint16(unix.ETH_P_ALL))
+	fd, err := unix.Socket(unix.AF_PACKET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, int(proto))
+	if err != nil {
+		return -1, fmt.Errorf("open packet socket: %w", err)
+	}
+	if err := unix.Bind(fd, &unix.SockaddrLinklayer{Protocol: proto, Ifindex: iface.Index}); err != nil {
+		unix.Close(fd)
+		return -1, fmt.Errorf("bind packet socket to %s: %w", name, err)
+	}
+	tv := unix.NsecToTimeval(timeout.Nanoseconds())
+	if err := unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv); err != nil {
+		unix.Close(fd)
+		return -1, fmt.Errorf("set packet socket timeout: %w", err)
+	}
+	return fd, nil
 }
 
 // queueUDP installs an nftables rule that queues outgoing UDP packets for
