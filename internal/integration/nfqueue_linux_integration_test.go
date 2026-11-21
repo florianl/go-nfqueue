@@ -13,6 +13,7 @@ import (
 	"time"
 
 	nfqueue "github.com/florianl/go-nfqueue/v2"
+	"golang.org/x/sys/unix"
 )
 
 func startDummyPingTraffic(t *testing.T, ctx context.Context) {
@@ -122,18 +123,33 @@ func TestNfqueuePacketPath(t *testing.T) {
 		}
 		defer nfq.Close()
 
+		// The dummy interface discards packets, but a packet socket on it sees
+		// them on transmit, which happens only after NfAccept reinjects them.
+		capture, err := capturePackets("dummy0", 2*time.Second)
+		if err != nil {
+			return err
+		}
+		defer unix.Close(capture)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		// The test only asserts that the packet reaches the callback intact,
-		// not what the kernel does with it after the verdict.
 		received := make(chan struct{})
+		verdictErr := make(chan error, 1)
 		var once sync.Once
 		err = nfq.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) int {
-			if a.Payload != nil && bytes.HasSuffix(*a.Payload, []byte("test-packet")) {
-				once.Do(func() { close(received) })
+			if a.Payload == nil || !bytes.HasSuffix(*a.Payload, []byte("test-packet")) {
+				nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+				return 0
 			}
-			nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+			err := nfq.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+			// Report only the first test packet, so both channels are closed
+			// exactly once.
+			once.Do(func() {
+				verdictErr <- err
+				close(verdictErr)
+				close(received)
+			})
 			return 0
 		}, func(err error) int {
 			// Timeouts return an error "netlink receive: use of closed file".
@@ -160,6 +176,19 @@ func TestNfqueuePacketPath(t *testing.T) {
 		case <-ctx.Done():
 			return fmt.Errorf("nfqueue callback never received the packet")
 		}
-		return nil
+		if err := <-verdictErr; err != nil {
+			return fmt.Errorf("failed to set verdict: %v", err)
+		}
+
+		buf := make([]byte, 256)
+		for {
+			n, _, err := unix.Recvfrom(capture, buf, 0)
+			if err != nil {
+				return fmt.Errorf("packet not reinjected after NfAccept: %v", err)
+			}
+			if bytes.HasSuffix(buf[:n], []byte("test-packet")) {
+				return nil
+			}
+		}
 	})
 }
