@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -107,7 +108,7 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestNfqueuePacketPath(t *testing.T) {
-	inNetNS(t, func() error {
+	inNetNS(t, func() (err error) {
 		const port = 9999
 		cfg := nfqueue.Config{
 			NfQueue:      200,
@@ -117,6 +118,12 @@ func TestNfqueuePacketPath(t *testing.T) {
 			WriteTimeout: 100 * time.Millisecond,
 		}
 
+		iface, cleanup, err := setupDummy("dummy0", dummyPrefix)
+		if err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, cleanup()) }()
+
 		nfq, addr, err := openQueue(cfg, port)
 		if err != nil {
 			return err
@@ -125,7 +132,7 @@ func TestNfqueuePacketPath(t *testing.T) {
 
 		// The dummy interface discards packets, but a packet socket on it sees
 		// them on transmit, which happens only after NfAccept reinjects them.
-		capture, err := capturePackets("dummy0", 2*time.Second)
+		capture, err := capturePackets(iface, 2*time.Second)
 		if err != nil {
 			return err
 		}

@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -30,7 +31,7 @@ func BenchmarkThroughput(b *testing.B) {
 }
 
 func runReceiveBench(b *testing.B, packetSize int) {
-	inNetNS(b, func() error {
+	inNetNS(b, func() (err error) {
 		const port = 9999
 		cfg := nfqueue.Config{
 			NfQueue:      200,
@@ -38,6 +39,12 @@ func runReceiveBench(b *testing.B, packetSize int) {
 			MaxQueueLen:  4096,
 			MaxPacketLen: 0xFFFF, // copy the whole packet
 		}
+
+		_, cleanup, err := setupDummy("dummy0", dummyPrefix)
+		if err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, cleanup()) }()
 
 		nfq, addr, err := openQueue(cfg, port)
 		if err != nil {
