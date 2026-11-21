@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -37,12 +38,21 @@ func inNetNS(tb testing.TB, fn func() error) {
 	}
 }
 
-// setupDummy creates an up dummy interface with the given address. Send to
-// another address in prefix, not the interface's own, to route through it.
-func setupDummy(name string, prefix netip.Prefix) error {
+var (
+	// dummyPrefix is the address and subnet assigned to the dummy interface.
+	dummyPrefix = netip.MustParsePrefix("10.0.0.1/24")
+	// dummyPeer is an address in dummyPrefix that is routed through the dummy
+	// interface.
+	dummyPeer = net.IPv4(10, 0, 0, 2)
+)
+
+// setupDummy creates an up dummy interface with the given address and returns
+// it along with a function that deletes it. Send to another address in
+// prefix, not the interface's own, to route through it.
+func setupDummy(name string, prefix netip.Prefix) (*net.Interface, func() error, error) {
 	con, err := rtnetlink.Dial(nil)
 	if err != nil {
-		return fmt.Errorf("dial rtnetlink: %w", err)
+		return nil, nil, fmt.Errorf("dial rtnetlink: %w", err)
 	}
 	defer con.Close()
 
@@ -55,11 +65,22 @@ func setupDummy(name string, prefix netip.Prefix) error {
 			Info: &rtnetlink.LinkInfo{Kind: "dummy"},
 		},
 	}); err != nil {
-		return fmt.Errorf("create %s: %w", name, err)
+		return nil, nil, fmt.Errorf("create %s: %w", name, err)
 	}
 	iface, err := net.InterfaceByName(name)
 	if err != nil {
-		return fmt.Errorf("lookup %s: %w", name, err)
+		return nil, nil, fmt.Errorf("lookup %s: %w", name, err)
+	}
+	cleanup := func() error {
+		con, err := rtnetlink.Dial(nil)
+		if err != nil {
+			return fmt.Errorf("dial rtnetlink: %w", err)
+		}
+		defer con.Close()
+		if err := con.Link.Delete(uint32(iface.Index)); err != nil {
+			return fmt.Errorf("delete %s: %w", name, err)
+		}
+		return nil
 	}
 
 	addr := net.IP(prefix.Addr().AsSlice())
@@ -73,18 +94,14 @@ func setupDummy(name string, prefix netip.Prefix) error {
 			Local:   addr,
 		},
 	}); err != nil {
-		return fmt.Errorf("add %s to %s: %w", prefix, name, err)
+		return nil, nil, errors.Join(fmt.Errorf("add %s to %s: %w", prefix, name, err), cleanup())
 	}
-	return nil
+	return iface, cleanup, nil
 }
 
 // capturePackets opens an AF_PACKET socket that sees packets transmitted on
-// the named interface, with reads timing out after timeout.
-func capturePackets(name string, timeout time.Duration) (int, error) {
-	iface, err := net.InterfaceByName(name)
-	if err != nil {
-		return -1, fmt.Errorf("lookup %s: %w", name, err)
-	}
+// iface, with reads timing out after timeout.
+func capturePackets(iface *net.Interface, timeout time.Duration) (int, error) {
 	// Only ETH_P_ALL sockets see outgoing packets. The kernel expects it in
 	// network byte order.
 	proto := binaryutil.NativeEndian.Uint16(binaryutil.BigEndian.PutUint16(unix.ETH_P_ALL))
@@ -94,7 +111,7 @@ func capturePackets(name string, timeout time.Duration) (int, error) {
 	}
 	if err := unix.Bind(fd, &unix.SockaddrLinklayer{Protocol: proto, Ifindex: iface.Index}); err != nil {
 		unix.Close(fd)
-		return -1, fmt.Errorf("bind packet socket to %s: %w", name, err)
+		return -1, fmt.Errorf("bind packet socket to %s: %w", iface.Name, err)
 	}
 	tv := unix.NsecToTimeval(timeout.Nanoseconds())
 	if err := unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv); err != nil {
@@ -146,13 +163,10 @@ func queueUDP(dport, queue uint16) error {
 	return nil
 }
 
-// openQueue sets up a dummy interface, queues outgoing UDP traffic for port
-// to cfg.NfQueue and opens the queue. Packets sent to the returned address
-// go through the queue.
+// openQueue queues outgoing UDP traffic for port to cfg.NfQueue and opens the
+// queue. With a dummy interface on dummyPrefix, packets sent to the returned
+// address go through the queue.
 func openQueue(cfg nfqueue.Config, port uint16) (*nfqueue.Nfqueue, *net.UDPAddr, error) {
-	if err := setupDummy("dummy0", netip.MustParsePrefix("10.0.0.1/24")); err != nil {
-		return nil, nil, err
-	}
 	if err := queueUDP(port, cfg.NfQueue); err != nil {
 		return nil, nil, err
 	}
@@ -160,5 +174,5 @@ func openQueue(cfg nfqueue.Config, port uint16) (*nfqueue.Nfqueue, *net.UDPAddr,
 	if err != nil {
 		return nil, nil, fmt.Errorf("open nfqueue: %w", err)
 	}
-	return nfq, &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: int(port)}, nil
+	return nfq, &net.UDPAddr{IP: dummyPeer, Port: int(port)}, nil
 }
