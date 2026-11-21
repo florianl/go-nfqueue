@@ -17,27 +17,31 @@ import (
 
 func BenchmarkThroughput(b *testing.B) {
 	cases := []struct {
-		name       string
-		packetSize int
+		name        string
+		packetSize  int
+		preallocate bool
 	}{
-		{"packet=128", 128},
-		{"packet=1500", 1500},
+		{"packet=128/preallocate=false", 128, false},
+		{"packet=128/preallocate=true", 128, true},
+		{"packet=1500/preallocate=false", 1500, false},
+		{"packet=1500/preallocate=true", 1500, true},
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
-			runReceiveBench(b, tc.packetSize)
+			runReceiveBench(b, tc.packetSize, tc.preallocate)
 		})
 	}
 }
 
-func runReceiveBench(b *testing.B, packetSize int) {
+func runReceiveBench(b *testing.B, packetSize int, preallocate bool) {
 	inNetNS(b, func() (err error) {
 		const port = 9999
 		cfg := nfqueue.Config{
-			NfQueue:      200,
-			Copymode:     nfqueue.NfQnlCopyPacket,
-			MaxQueueLen:  4096,
-			MaxPacketLen: 0xFFFF, // copy the whole packet
+			NfQueue:           200,
+			Copymode:          nfqueue.NfQnlCopyPacket,
+			MaxQueueLen:       4096,
+			MaxPacketLen:      0xFFFF, // copy the whole packet
+			PreallocateBuffer: preallocate,
 		}
 
 		_, cleanup, err := setupDummy("dummy0", dummyPrefix)

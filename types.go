@@ -62,6 +62,10 @@ type Config struct {
 	// Optional flags for this Nfqueue socket.
 	Flags uint32
 
+	// PreallocateBuffer reads messages into a preallocated buffer instead of
+	// sizing each one first. This improves performance for small messages.
+	PreallocateBuffer bool
+
 	// AfFamily for this Nfqueue socket.
 	AfFamily uint8
 

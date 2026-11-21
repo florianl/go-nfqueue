@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -259,6 +260,38 @@ type Logger interface {
 	Errorf(format string, args ...any)
 }
 
+// mnlSocketBufferSize mirrors libmnl's MNL_SOCKET_BUFFER_SIZE: the kernel's
+// typical netlink datagram size (NLMSG_GOODSIZE), not the netlink socket
+// buffer.
+//
+// See https://git.netfilter.org/libmnl/tree/include/libmnl/libmnl.h?id=03da98bcd284d55212bc79e91dfb63da0ef7b937#n20
+func mnlSocketBufferSize(pageSize int) int {
+	return min(pageSize, 8192)
+}
+
+// messageBufferSize returns a receive buffer size that fits any message the
+// kernel sends for config, so netlink can skip peeking before each read.
+func messageBufferSize(config *Config) int {
+	// https://github.com/torvalds/linux/blob/v7.3/net/netfilter/nfnetlink_queue.c#L69
+	const maxCopyRange = 0xffff - unix.NLA_HDRLEN
+	// Headroom for the attributes around the payload, which vary per packet
+	// (https://github.com/torvalds/linux/blob/v7.3/net/netfilter/nfnetlink_queue.c#L741-L816).
+	// Same as libnetfilter_queue's example:
+	// https://git.netfilter.org/libnetfilter_queue/tree/examples/nf-queue.c?id=87405a48a72460392935efb67705f3d3733306de#n147
+	nlMsgOverhead := mnlSocketBufferSize(os.Getpagesize()) / 2
+
+	if config.Copymode != NfQnlCopyPacket {
+		return nlMsgOverhead
+	}
+
+	// The kernel copies up to maxCopyRange when MaxPacketLen is 0 or larger.
+	if config.MaxPacketLen > 0 && config.MaxPacketLen < maxCopyRange {
+		return nlMsgOverhead + int(config.MaxPacketLen)
+	}
+
+	return nlMsgOverhead + maxCopyRange
+}
+
 // Open a connection to the netfilter queue subsystem
 func Open(config *Config) (*Nfqueue, error) {
 	var nfqueue Nfqueue
@@ -267,7 +300,11 @@ func Open(config *Config) (*Nfqueue, error) {
 		return nil, ErrInvFlag
 	}
 
-	con, err := netlink.Dial(unix.NETLINK_NETFILTER, &netlink.Config{NetNS: config.NetNS})
+	ncfg := &netlink.Config{NetNS: config.NetNS}
+	if config.PreallocateBuffer {
+		ncfg.MessageBufferSize = messageBufferSize(config)
+	}
+	con, err := netlink.Dial(unix.NETLINK_NETFILTER, ncfg)
 	if err != nil {
 		return nil, err
 	}
